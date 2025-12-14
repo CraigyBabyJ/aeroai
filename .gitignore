@@ -50,3 +50,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+
+whisper/models/*.bin
+whisper/models/*.gguf
