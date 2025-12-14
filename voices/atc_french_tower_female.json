@@ -1,0 +1,10 @@
+{
+  "id": "atc_french_tower_female",
+  "display_name": "French Tower (Female)",
+  "tts_model": "gpt-4o-mini-tts",
+  "tts_voice": "alloy",
+  "style_hint": "French-accented English, female voice, authoritative tower clearances.",
+  "speaking_rate": 1.0,
+  "region_codes": ["LF"],
+  "controller_types": ["TOWER"]
+}

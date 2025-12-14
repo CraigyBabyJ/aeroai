@@ -1,0 +1,10 @@
+{
+  "id": "atc_spanish_tower_male",
+  "display_name": "Spanish Tower (Male)",
+  "tts_model": "gpt-4o-mini-tts",
+  "tts_voice": "alloy",
+  "style_hint": "Spanish-accented English, male voice, authoritative tower clearances.",
+  "speaking_rate": 1.0,
+  "region_codes": ["LE"],
+  "controller_types": ["TOWER"]
+}

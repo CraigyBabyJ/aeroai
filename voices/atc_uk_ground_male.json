@@ -1,0 +1,10 @@
+{
+  "id": "atc_uk_ground_male",
+  "display_name": "UK Ground (Male)",
+  "tts_model": "gpt-4o-mini-tts",
+  "tts_voice": "alloy",
+  "style_hint": "British-accented English, male voice, firm but clear ground/taxi instructions.",
+  "speaking_rate": 1.0,
+  "region_codes": ["EG"],
+  "controller_types": ["GROUND"]
+}

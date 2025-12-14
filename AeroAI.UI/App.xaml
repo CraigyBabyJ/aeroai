@@ -1,0 +1,26 @@
+<Application x:Class="AeroAI.UI.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- Dark Theme Colors -->
+        <Color x:Key="BackgroundDark">#1a1a2e</Color>
+        <Color x:Key="BackgroundMedium">#16213e</Color>
+        <Color x:Key="BackgroundLight">#1f4068</Color>
+        <Color x:Key="AccentGreen">#00ff88</Color>
+        <Color x:Key="AccentCyan">#00d4ff</Color>
+        <Color x:Key="AccentYellow">#ffd700</Color>
+        <Color x:Key="TextPrimary">#ffffff</Color>
+        <Color x:Key="TextSecondary">#a0a0a0</Color>
+        
+        <SolidColorBrush x:Key="BackgroundDarkBrush" Color="{StaticResource BackgroundDark}"/>
+        <SolidColorBrush x:Key="BackgroundMediumBrush" Color="{StaticResource BackgroundMedium}"/>
+        <SolidColorBrush x:Key="BackgroundLightBrush" Color="{StaticResource BackgroundLight}"/>
+        <SolidColorBrush x:Key="AccentGreenBrush" Color="{StaticResource AccentGreen}"/>
+        <SolidColorBrush x:Key="AccentCyanBrush" Color="{StaticResource AccentCyan}"/>
+        <SolidColorBrush x:Key="AccentYellowBrush" Color="{StaticResource AccentYellow}"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimary}"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondary}"/>
+    </Application.Resources>
+</Application>
+

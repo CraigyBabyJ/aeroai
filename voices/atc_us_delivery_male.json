@@ -1,0 +1,14 @@
+{
+    "id": "atc_us_delivery_male",
+    "display_name": "US Delivery (Male)",
+    "tts_model": "gpt-4o-mini-tts",
+    "tts_voice": "alloy",
+    "style_hint": "American-accented English, male voice, concise IFR delivery.",
+    "speaking_rate": 1.0,
+    "region_codes": [
+        "K"
+    ],
+    "controller_types": [
+        "DELIVERY"
+    ]
+}

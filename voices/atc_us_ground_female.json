@@ -1,0 +1,10 @@
+{
+  "id": "atc_us_ground_female",
+  "display_name": "US Ground (Female)",
+  "tts_model": "gpt-4o-mini-tts",
+  "tts_voice": "alloy",
+  "style_hint": "American-accented English, female voice, clear and directive ground control.",
+  "speaking_rate": 1.0,
+  "region_codes": ["K"],
+  "controller_types": ["GROUND"]
+}

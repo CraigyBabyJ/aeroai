@@ -1,0 +1,38 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Explicitly declare text files you want to always be normalized and converted
+# to native line endings on checkout.
+*.cs text eol=crlf
+*.csproj text eol=crlf
+*.sln text eol=crlf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.py text eol=lf
+*.xaml text eol=crlf
+*.xml text eol=crlf
+*.config text eol=crlf
+*.props text eol=crlf
+*.targets text eol=crlf
+
+# Denote all files that are truly binary and should not be modified.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.wav binary
+*.mp3 binary
+*.zip binary
+*.pdf binary
+*.cache binary
+
+# Files that should be ignored by Git
+.env -text
+

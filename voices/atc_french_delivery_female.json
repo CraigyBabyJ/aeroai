@@ -1,0 +1,14 @@
+{
+    "id": "atc_french_delivery_female",
+    "display_name": "French Delivery (Female)",
+    "tts_model": "gpt-4o-mini-tts",
+    "tts_voice": "alloy",
+    "style_hint": "French-accented English, female voice, concise delivery.",
+    "speaking_rate": 1.0,
+    "region_codes": [
+        "LF"
+    ],
+    "controller_types": [
+        "DELIVERY"
+    ]
+}

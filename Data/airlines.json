@@ -1,0 +1,620 @@
+{
+  "airlines": {
+    "AAL": {
+      "name": "American Airlines",
+      "call_sign": "AMERICAN"
+    },
+    "AFR": {
+      "name": "Air France",
+      "call_sign": "AIRFRANCE"
+    },
+    "BAW": {
+      "name": "British Airways",
+      "call_sign": "SPEEDBIRD"
+    },
+    "DLH": {
+      "name": "Lufthansa",
+      "call_sign": "LUFTHANSA"
+    },
+    "UAE": {
+      "name": "Emirates",
+      "call_sign": "EMIRATES"
+    },
+    "QFA": {
+      "name": "Qantas",
+      "call_sign": "QANTAS"
+    },
+    "KLM": {
+      "name": "KLM Royal Dutch Airlines",
+      "call_sign": "KLM"
+    },
+    "SIA": {
+      "name": "Singapore Airlines",
+      "call_sign": "SINGAPORE"
+    },
+    "JAL": {
+      "name": "Japan Airlines",
+      "call_sign": "JAPAN AIR"
+    },
+    "THY": {
+      "name": "Turkish Airlines",
+      "call_sign": "TURKISH"
+    },
+    "SWR": {
+      "name": "Swiss International Air Lines",
+      "call_sign": "SWISS"
+    },
+    "SAS": {
+      "name": "Scandinavian Airlines",
+      "call_sign": "SCANDINAVIAN"
+    },
+    "ANZ": {
+      "name": "Air New Zealand",
+      "call_sign": "NEW ZEALAND"
+    },
+    "CCA": {
+      "name": "Air China",
+      "call_sign": "AIR CHINA"
+    },
+    "CPA": {
+      "name": "Cathay Pacific",
+      "call_sign": "CATHAY"
+    },
+    "KAL": {
+      "name": "Korean Air",
+      "call_sign": "KOREANAIR"
+    },
+    "ASA": {
+      "name": "Alaska Airlines",
+      "call_sign": "ALASKA"
+    },
+    "DAL": {
+      "name": "Delta Air Lines",
+      "call_sign": "DELTA"
+    },
+    "UAL": {
+      "name": "United Airlines",
+      "call_sign": "UNITED"
+    },
+    "VOZ": {
+      "name": "Virgin Australia",
+      "call_sign": "VELOCITY"
+    },
+    "RYR": {
+      "name": "Ryanair DAC",
+      "call_sign": "RYANAIR"
+    },
+    "EZY": {
+      "name": "easyJet UK",
+      "call_sign": "EASY"
+    },
+    "EJU": {
+      "name": "easyJet Europe",
+      "call_sign": "ALPINE"
+    },
+    "EZS": {
+      "name": "easyJet Switzerland",
+      "call_sign": "TOPSWISS"
+    },
+    "EIN": {
+      "name": "Aer Lingus",
+      "call_sign": "SHAMROCK"
+    },
+    "WZZ": {
+      "name": "Wizz Air",
+      "call_sign": "WIZZ AIR"
+    },
+    "NAX": {
+      "name": "Norwegian Air Shuttle",
+      "call_sign": "NOR SHUTTLE"
+    },
+    "VLG": {
+      "name": "Vueling Airlines",
+      "call_sign": "VUELING"
+    },
+    "JBU": {
+      "name": "JetBlue Airways",
+      "call_sign": "JETBLUE"
+    },
+    "FFT": {
+      "name": "Frontier Airlines",
+      "call_sign": "FRONTIER FLIGHT"
+    },
+    "SWA": {
+      "name": "Southwest Airlines",
+      "call_sign": "SOUTHWEST"
+    },
+    "ETD": {
+      "name": "Etihad Airways",
+      "call_sign": "ETIHAD"
+    },
+    "QTR": {
+      "name": "Qatar Airways",
+      "call_sign": "QATARI"
+    },
+    "AIC": {
+      "name": "Air India",
+      "call_sign": "AIR INDIA"
+    },
+    "IBE": {
+      "name": "Iberia",
+      "call_sign": "IBERIA"
+    },
+    "VIR": {
+      "name": "Virgin Atlantic",
+      "call_sign": "VIRGIN"
+    },
+    "HVN": {
+      "name": "Vietnam Airlines",
+      "call_sign": "VIETNAM AIRLINES"
+    },
+    "TAM": {
+      "name": "LATAM Airlines Brasil",
+      "call_sign": "TAM"
+    },
+    "LAN": {
+      "name": "LATAM Airlines Group",
+      "call_sign": "LAN CHILE"
+    },
+    "GIA": {
+      "name": "Garuda Indonesia",
+      "call_sign": "INDONESIA"
+    },
+    "PIA": {
+      "name": "Pakistan International Airlines",
+      "call_sign": "PAKISTAN"
+    },
+    "MAS": {
+      "name": "Malaysia Airlines",
+      "call_sign": "MALAYSIAN"
+    },
+    "THA": {
+      "name": "Thai Airways",
+      "call_sign": "THAI"
+    },
+    "SVA": {
+      "name": "Saudia",
+      "call_sign": "SAUDIA"
+    },
+    "KAC": {
+      "name": "Kuwait Airways",
+      "call_sign": "KUWAITI"
+    },
+    "MEA": {
+      "name": "Middle East Airlines",
+      "call_sign": "CEDAR JET"
+    },
+    "RAM": {
+      "name": "Royal Air Maroc",
+      "call_sign": "ROYAL AIR MAROC"
+    },
+    "RBA": {
+      "name": "Royal Brunei Airlines",
+      "call_sign": "BRUNEI"
+    },
+    "GFA": {
+      "name": "Gulf Air",
+      "call_sign": "GULF AIR"
+    },
+    "OMA": {
+      "name": "Oman Air",
+      "call_sign": "OMAN"
+    },
+    "AUA": {
+      "name": "Austrian Airlines",
+      "call_sign": "AUSTRIAN"
+    },
+    "LOT": {
+      "name": "LOT Polish Airlines",
+      "call_sign": "POLLOT"
+    },
+    "CSA": {
+      "name": "Czech Airlines",
+      "call_sign": "CSA"
+    },
+    "TAR": {
+      "name": "TAROM",
+      "call_sign": "TAROM"
+    },
+    "FIN": {
+      "name": "Finnair",
+      "call_sign": "FINNAIR"
+    },
+    "BEL": {
+      "name": "Brussels Airlines",
+      "call_sign": "BEE-LINE"
+    },
+    "AEE": {
+      "name": "Aegean Airlines",
+      "call_sign": "AEGEAN"
+    },
+    "ROU": {
+      "name": "Air Canada Rouge",
+      "call_sign": "ROUGE"
+    },
+    "ACA": {
+      "name": "Air Canada",
+      "call_sign": "AIR CANADA"
+    },
+    "IGO": {
+      "name": "IndiGo",
+      "call_sign": "IFLY"
+    },
+    "TOM": {
+      "name": "Tui Airways",
+      "call_sign": "TOMJET"
+    },
+    "EXS": {
+      "name": "Jet2",
+      "call_sign": "CHANNEX"
+    },
+    "AFL": {
+      "name": "Aeroflot",
+      "call_sign": "AEROFLOT"
+    },
+    "AXM": {
+      "name": "AirAsia",
+      "call_sign": "ASIAN EXPRESS"
+    },
+    "AAY": {
+      "name": "Allegiant Air",
+      "call_sign": "ALLEGIANT"
+    },
+    "ANA": {
+      "name": "All Nippon Airways",
+      "call_sign": "ALL NIPPON"
+    },
+    "AAR": {
+      "name": "Asiana Airlines",
+      "call_sign": "ASIANA"
+    },
+    "AZU": {
+      "name": "Azul Brazilian Airlines",
+      "call_sign": "AZUL"
+    },
+    "BAV": {
+      "name": "Bamboo Airways",
+      "call_sign": "BAMBOO"
+    },
+    "CAL": {
+      "name": "China Airlines",
+      "call_sign": "DYNASTY"
+    },
+    "CES": {
+      "name": "China Eastern Airlines",
+      "call_sign": "CHINA EASTERN"
+    },
+    "CSN": {
+      "name": "China Southern Airlines",
+      "call_sign": "CHINA SOUTHERN"
+    },
+    "CMP": {
+      "name": "Copa Airlines",
+      "call_sign": "COPA"
+    },
+    "MSR": {
+      "name": "EgyptAir",
+      "call_sign": "EGYPTAIR"
+    },
+    "ELY": {
+      "name": "El Al Israel Airlines",
+      "call_sign": "EL AL"
+    },
+    "CHH": {
+      "name": "Hainan Airlines",
+      "call_sign": "HAINAN"
+    },
+    "HAL": {
+      "name": "Hawaiian Airlines",
+      "call_sign": "HAWAIIAN"
+    },
+    "IBS": {
+      "name": "Iberia Express",
+      "call_sign": "IBEREXPRESS"
+    },
+    "ITY": {
+      "name": "ITA Airways",
+      "call_sign": "ITARROW"
+    },
+    "JJA": {
+      "name": "Jeju Air",
+      "call_sign": "JEJU AIR"
+    },
+    "JST": {
+      "name": "Jetstar Airways",
+      "call_sign": "JETSTAR"
+    },
+    "PAL": {
+      "name": "Philippine Airlines",
+      "call_sign": "PHILIPPINE"
+    },
+    "POE": {
+      "name": "Porter Airlines",
+      "call_sign": "PORTER AIR"
+    },
+    "TGW": {
+      "name": "Scoot",
+      "call_sign": "SCOOT"
+    },
+    "NKS": {
+      "name": "Spirit Airlines",
+      "call_sign": "SPIRIT WINGS"
+    },
+    "SCX": {
+      "name": "Sun Country Airlines",
+      "call_sign": "SUN COUNTRY"
+    },
+    "TAP": {
+      "name": "TAP Air Portugal",
+      "call_sign": "AIR PORTUGAL"
+    },
+    "TRA": {
+      "name": "Transavia",
+      "call_sign": "TRANSAVIA"
+    },
+    "VIV": {
+      "name": "VivaAerobus",
+      "call_sign": "VIVA"
+    },
+    "VOI": {
+      "name": "Volaris",
+      "call_sign": "VOLARIS"
+    },
+    "WJA": {
+      "name": "WestJet",
+      "call_sign": "WESTJET"
+    },
+    "CXA": {
+      "name": "XiamenAir",
+      "call_sign": "XIAMEN AIR"
+    },
+    "RUK": {
+      "name": "Ryanair UK",
+      "call_sign": "BLUE MAX"
+    },
+    "RYL": {
+      "name": "Buzz (Ryanair Sun)",
+      "call_sign": "MAGIC"
+    },
+    "RYS": {
+      "name": "Malta Air",
+      "call_sign": "MALTA AIR"
+    },
+    "RMS": {
+      "name": "Ryanair Malta",
+      "call_sign": "RYANAIR MALTA"
+    },
+    "CFE": {
+      "name": "BA CityFlyer",
+      "call_sign": "FLYER"
+    },
+    "EFW": {
+      "name": "BA EuroFlyer",
+      "call_sign": "GRIFFIN"
+    },
+    "WUK": {
+      "name": "Wizz Air UK",
+      "call_sign": "WIZZ GO"
+    },
+    "LOG": {
+      "name": "Loganair",
+      "call_sign": "LOGAN"
+    },
+    "EZE": {
+      "name": "Eastern Airways",
+      "call_sign": "EASTFLIGHT"
+    },
+    "EUK": {
+      "name": "Aer Lingus UK",
+      "call_sign": "GREEN FLIGHT"
+    },
+    "UBT": {
+      "name": "Norse Atlantic UK",
+      "call_sign": "LONGBOAT"
+    },
+    "PAA": {
+      "name": "Pan American World Airways",
+      "call_sign": "CLIPPER"
+    },
+    "TWA": {
+      "name": "Trans World Airlines",
+      "call_sign": "TWA"
+    },
+    "COA": {
+      "name": "Continental Airlines",
+      "call_sign": "CONTINENTAL"
+    },
+    "NWA": {
+      "name": "Northwest Airlines",
+      "call_sign": "NORTHWEST"
+    },
+    "USA": {
+      "name": "US Airways",
+      "call_sign": "CACTUS"
+    },
+    "MON": {
+      "name": "Monarch Airlines",
+      "call_sign": "MONARCH"
+    },
+    "TCX": {
+      "name": "Thomas Cook Airlines",
+      "call_sign": "THOMAS COOK"
+    },
+    "WOW": {
+      "name": "WOW Air",
+      "call_sign": "WOW AIR"
+    },
+    "KFR": {
+      "name": "Kingfisher Airlines",
+      "call_sign": "KINGFISHER"
+    },
+    "AIB": {
+      "name": "Air Berlin",
+      "call_sign": "AIR BERLIN"
+    },
+    "FLY": {
+      "name": "Flybe",
+      "call_sign": "JERSEY"
+    },
+    "FHY": {
+      "name": "First Choice Airways",
+      "call_sign": "JETSET"
+    },
+    "MYT": {
+      "name": "MyTravel Airways",
+      "call_sign": "KESTREL"
+    },
+    "XLU": {
+      "name": "XL Airways UK",
+      "call_sign": "EXPO"
+    },
+    "TED": {
+      "name": "Ted (United Airlines)",
+      "call_sign": "UNITED"
+    },
+    "CZE": {
+      "name": "Czech Airlines",
+      "call_sign": "CSA"
+    },
+    "FJE": {
+      "name": "Flyr",
+      "call_sign": "GREENSTAR"
+    },
+    "VVC": {
+      "name": "VivaColombia",
+      "call_sign": "VIVACOLOMBIA"
+    },
+    "ULC": {
+      "name": "Ultra Air",
+      "call_sign": "ULTRA"
+    },
+    "ABQ": {
+      "name": "AB Aviation",
+      "call_sign": "AB AVIATION"
+    },
+    "AHA": {
+      "name": "Aha!",
+      "call_sign": "AHA!"
+    },
+    "CHO": {
+      "name": "Air Choice One",
+      "call_sign": "CHOICE"
+    },
+    "EGO": {
+      "name": "EGO Airways",
+      "call_sign": "EGO AIR"
+    },
+    "BMS": {
+      "name": "Blue Air",
+      "call_sign": "BLUE MESSENGER"
+    },
+    "TRJ": {
+      "name": "Trujet",
+      "call_sign": "TRUJET"
+    },
+    "TMA": {
+      "name": "Trans Mediterranean Airways",
+      "call_sign": "TANGO LIMA"
+    },
+    "BMA": {
+      "name": "British Midland Airways",
+      "call_sign": "MIDLAND"
+    },
+    "BCA": {
+      "name": "British Caledonian",
+      "call_sign": "CALEDONIAN"
+    },
+    "VAR": {
+      "name": "VARIG",
+      "call_sign": "VARIG"
+    },
+    "SAB": {
+      "name": "Sabena",
+      "call_sign": "SABENA"
+    },
+    "AZA": {
+      "name": "Alitalia",
+      "call_sign": "ALITALIA"
+    },
+    "MAH": {
+      "name": "Malév Hungarian Airlines",
+      "call_sign": "MALEV"
+    },
+    "BWA": {
+      "name": "BWIA West Indies Airways",
+      "call_sign": "WEST INDIES"
+    },
+    "CUB": {
+      "name": "Cubana de Aviación",
+      "call_sign": "CUBANA"
+    },
+    "EAL": {
+      "name": "Eastern Air Lines",
+      "call_sign": "EASTERN"
+    },
+    "CLH": {
+      "name": "Lufthansa CityLine",
+      "call_sign": "HANSALINE"
+    },
+    "EWG": {
+      "name": "Eurowings",
+      "call_sign": "EUROWINGS"
+    },
+    "ENH": {
+      "name": "Discover Airlines",
+      "call_sign": "OCEAN"
+    },
+    "KLC": {
+      "name": "KLM Cityhopper",
+      "call_sign": "CITY"
+    },
+    "FDX": {
+      "name": "FedEx",
+      "call_sign": "FEDEX"
+    },
+    "UPS": {
+      "name": "UPS Airlines",
+      "call_sign": "UPS"
+    },
+    "GTI": {
+      "name": "Atlas Air",
+      "call_sign": "GIANT"
+    },
+    "CLX": {
+      "name": "Cargolux",
+      "call_sign": "CARGOLUX"
+    },
+    "MPH": {
+      "name": "Martinair",
+      "call_sign": "MARTINAIR"
+    },
+    "SKW": {
+      "name": "SkyWest Airlines",
+      "call_sign": "SKYWEST"
+    },
+    "ASH": {
+      "name": "Mesa Airlines",
+      "call_sign": "AIR SHUTTLE"
+    },
+    "RPA": {
+      "name": "Republic Airways",
+      "call_sign": "BRICKYARD"
+    },
+    "ENY": {
+      "name": "Envoy Air",
+      "call_sign": "ENVOY"
+    },
+    "JIA": {
+      "name": "PSA Airlines",
+      "call_sign": "BLUE STREAK"
+    },
+    "JZR": {
+      "name": "Jazeera Airways",
+      "call_sign": "JAZEERA"
+    },
+    "FAD": {
+      "name": "Flyadeal",
+      "call_sign": "FLYADEAL"
+    }
+  }
+}

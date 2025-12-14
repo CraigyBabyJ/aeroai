@@ -1,0 +1,75 @@
+{
+  "enabled": true,
+  "profiles": {
+    "ClearanceDelivery": {
+      "enabled": true,
+      "bandpassLowHz": 400,
+      "bandpassHighHz": 2800,
+      "noiseLevel": 0.30,
+      "compressionAmount": 0.5,
+      "dryWetMix": 0.85,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": 0.0
+    },
+    "Ground": {
+      "enabled": true,
+      "bandpassLowHz": 280,
+      "bandpassHighHz": 3400,
+      "noiseLevel": 0.06,
+      "compressionAmount": 0.15,
+      "dryWetMix": 0.42,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    },
+    "Tower": {
+      "enabled": true,
+      "bandpassLowHz": 300,
+      "bandpassHighHz": 3300,
+      "noiseLevel": 0.10,
+      "compressionAmount": 0.22,
+      "dryWetMix": 0.50,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    },
+    "Departure": {
+      "enabled": true,
+      "bandpassLowHz": 350,
+      "bandpassHighHz": 3100,
+      "noiseLevel": 0.16,
+      "compressionAmount": 0.32,
+      "dryWetMix": 0.60,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    },
+    "Center": {
+      "enabled": true,
+      "bandpassLowHz": 400,
+      "bandpassHighHz": 2800,
+      "noiseLevel": 0.25,
+      "compressionAmount": 0.45,
+      "dryWetMix": 0.72,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    },
+    "Arrival": {
+      "enabled": true,
+      "bandpassLowHz": 350,
+      "bandpassHighHz": 3100,
+      "noiseLevel": 0.14,
+      "compressionAmount": 0.28,
+      "dryWetMix": 0.55,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    },
+    "Approach": {
+      "enabled": true,
+      "bandpassLowHz": 300,
+      "bandpassHighHz": 3300,
+      "noiseLevel": 0.08,
+      "compressionAmount": 0.18,
+      "dryWetMix": 0.45,
+      "squelchTailFile": "Assets/Audio/delivery-tail.wav",
+      "squelchTailGainDb": -3.0
+    }
+  }
+}

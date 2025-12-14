@@ -1,0 +1,66 @@
+
+```json
+{
+  "controller_role": "{controller_role}",
+  "phase": "{phase}",
+  "flight_info": {
+    "callsign": "{callsign}",
+    "aircraft_type": "{aircraft_type}",
+    "dep_icao": "{dep_icao}",
+    "dep_name": "{dep_name}",
+    "arr_icao": "{arr_icao}",
+    "arr_name": "{arr_name}",
+    "cruise_level": "{cruise_level}",
+    "alternate_icao": "{alternate_icao}"
+  },
+  "clearance_decision": {
+    "clearance_type": "{clearance_type}",
+    "cleared_to": "{cleared_to}",
+    "route_summary": "{route_summary}",
+    "dep_runway": "{dep_runway}",
+    "arr_runway": "{arr_runway}",
+    "sid": "{sid}",
+    "star": "{star}",
+    "approach": "{approach}",
+    "via_radar_vectors": {via_radar_vectors},
+    "initial_altitude_ft": {initial_altitude_ft},
+    "cleared_altitude_ft": {cleared_altitude_ft},
+    "cleared_heading_deg": {cleared_heading_deg},
+    "speed_restriction_kt": {speed_restriction_kt},
+    "squawk": "{squawk}"
+  },
+  "weather_relevant": {
+    "dep_wind_dir": {dep_wind_dir},
+    "dep_wind_kt": {dep_wind_kt},
+    "arr_wind_dir": {arr_wind_dir},
+    "arr_wind_kt": {arr_wind_kt},
+    "qnh_hpa_dep": {qnh_hpa_dep},
+    "qnh_hpa_arr": {qnh_hpa_arr}
+  },
+  "state_flags": {
+    "ifr_clearance_issued": {ifr_clearance_issued},
+    "taxi_clearance_issued": {taxi_clearance_issued},
+    "lineup_issued": {lineup_issued},
+    "takeoff_issued": {takeoff_issued},
+    "approach_issued": {approach_issued},
+    "landing_issued": {landing_issued}
+  },
+  "permissions": {
+    "allow_ifr_clearance": {allow_ifr_clearance},
+    "allow_taxi": {allow_taxi},
+    "allow_lineup": {allow_lineup},
+    "allow_takeoff_clearance": {allow_takeoff_clearance},
+    "allow_approach_clearance": {allow_approach_clearance},
+    "allow_landing_clearance": {allow_landing_clearance}
+  }
+}
+```
+
+PILOT_TRANSMISSION:
+
+"{pilot_transmission}"
+
+---
+
+Respond with ONE ATC transmission only. Use the data from CONTEXT_JSON. Do not invent any values.
+

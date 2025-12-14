@@ -1,0 +1,10 @@
+{
+  "id": "default",
+  "display_name": "Default ATC Voice",
+  "tts_model": "gpt-4o-mini-tts",
+  "tts_voice": "alloy",
+  "style_hint": "Neutral ICAO ATC delivery agent, scotish acccent.",
+  "speaking_rate": 1.0,
+  "region_codes": [],
+  "controller_types": []
+}

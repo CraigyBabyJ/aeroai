@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>AeroAI</AssemblyName>
+    <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+    <UseSourceLink>false</UseSourceLink>
+    <Deterministic>false</Deterministic>
+  </PropertyGroup>
+
+  <!-- Disable Git info collection completely -->
+  <Target Name="GetGitVersion" />
+  <Target Name="GetSourceRevisionId" />
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <!-- Include source files from parent project (excluding Program.cs) -->
+  <ItemGroup>
+    <Compile Include="..\AeroAI\**\*.cs" LinkBase="AeroAI" />
+    <Compile Include="..\Config\*.cs" LinkBase="Config" />
+    <Compile Include="..\Data\*.cs" LinkBase="Data" Exclude="..\Data\*.py" />
+    <Compile Include="..\Models\*.cs" LinkBase="Models" />
+    <Compile Include="..\SimBrief\*.cs" LinkBase="SimBrief" />
+    <Compile Include="..\Weather\*.cs" LinkBase="Weather" />
+    <Compile Include="..\Atc\*.cs" LinkBase="Atc" />
+    <Compile Include="..\Audio\*.cs" LinkBase="Audio" />
+    <Compile Remove="..\Program.cs" />
+  </ItemGroup>
+
+  <!-- Copy data files -->
+  <ItemGroup>
+    <None Include="..\Data\airport-frequencies.json" Link="Data\airport-frequencies.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Data\airlines.json" Link="Data\airlines.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Config\audio-effects.json" Link="Config\audio-effects.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Data\aircraft_type.json" Link="Data\aircraft_type.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\voices\*.json" LinkBase="voices" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Assets\Audio\**\*.mp3" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Assets\Audio\**\*.wav" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\prompts\*.txt" LinkBase="prompts" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

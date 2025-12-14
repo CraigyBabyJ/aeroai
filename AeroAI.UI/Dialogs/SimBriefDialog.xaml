@@ -1,0 +1,37 @@
+<Window x:Class="AeroAI.UI.Dialogs.SimBriefDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Import from SimBrief" Height="200" Width="400"
+        WindowStartupLocation="CenterOwner"
+        Background="#1a1a2e" ResizeMode="NoResize">
+    
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Grid.Row="0" Text="SimBrief Pilot ID" 
+                   Foreground="White" FontSize="14" Margin="0,0,0,10"/>
+        
+        <TextBox Grid.Row="1" x:Name="PilotIdBox" 
+                 Background="#2a2a4a" Foreground="White" 
+                 BorderThickness="0" Padding="10" FontSize="14"/>
+        
+        <TextBlock Grid.Row="2" x:Name="StatusText" 
+                   Foreground="#a0a0a0" Margin="0,10,0,0"
+                   Text="Enter your SimBrief Pilot ID to import your flight plan."/>
+        
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="Cancel" Padding="20,8" Margin="0,0,10,0"
+                    Background="#2a2a4a" Foreground="White" BorderThickness="0"
+                    Click="Cancel_Click"/>
+            <Button Content="Import" Padding="20,8"
+                    Background="#00ff88" Foreground="Black" BorderThickness="0"
+                    Click="Import_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
