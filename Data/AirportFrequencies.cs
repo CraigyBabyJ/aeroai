@@ -13,6 +13,7 @@ public static class AirportFrequencies
 {
 	private static readonly Lazy<Dictionary<string, AirportFrequencySet>> AllByIcao = new Lazy<Dictionary<string, AirportFrequencySet>>(LoadAllFrequencies, isThreadSafe: true);
 	private static readonly Lazy<Dictionary<string, double>> GroundByIcao = new Lazy<Dictionary<string, double>>(LoadGroundFrequencies, isThreadSafe: true);
+	private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
 	/// <summary>
 	/// Try to fetch a ground frequency (MHz) for the given ICAO.
@@ -53,7 +54,7 @@ public static class AirportFrequencies
 		try
 		{
 			string jsonContent = File.ReadAllText(path);
-			var jsonData = JsonSerializer.Deserialize<Dictionary<string, AirportFrequencyJson>>(jsonContent);
+			var jsonData = JsonSerializer.Deserialize<Dictionary<string, AirportFrequencyJson>>(jsonContent, JsonOptions);
 			
 			if (jsonData != null)
 			{
@@ -90,7 +91,7 @@ public static class AirportFrequencies
 		try
 		{
 			string jsonContent = File.ReadAllText(path);
-			var jsonData = JsonSerializer.Deserialize<Dictionary<string, AirportFrequencyJson>>(jsonContent);
+			var jsonData = JsonSerializer.Deserialize<Dictionary<string, AirportFrequencyJson>>(jsonContent, JsonOptions);
 			
 			if (jsonData != null)
 			{
@@ -139,6 +140,20 @@ public static class AirportFrequencies
 			return fallback;
 		}
 
+		// Try one level higher (sibling Data folder to project directory).
+		string sibling = Path.Combine(baseDir, "..", "..", "..", "..", "Data", "airport-frequencies.json");
+		if (File.Exists(sibling))
+		{
+			return sibling;
+		}
+
+		// Try current working directory (dev run).
+		string cwdCandidate = Path.Combine(Directory.GetCurrentDirectory(), "Data", "airport-frequencies.json");
+		if (File.Exists(cwdCandidate))
+		{
+			return cwdCandidate;
+		}
+
 		return null;
 	}
 }
@@ -163,4 +178,3 @@ internal sealed class AirportFrequencyJson
 	public double? Departure { get; set; }
 	public double? Approach { get; set; }
 }
-

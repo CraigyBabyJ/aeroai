@@ -1,0 +1,174 @@
+<UserControl x:Class="AeroAI.UI.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:converters="clr-namespace:AeroAI.UI.Converters"
+             mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <converters:LevelToWidthConverter x:Key="LevelToWidthConverter"/>
+    </UserControl.Resources>
+    
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Title -->
+            <TextBlock Text="Settings" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,20"/>
+
+            <!-- Two Column Layout for Audio -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="400"/>
+                    <ColumnDefinition Width="40"/>
+                    <ColumnDefinition Width="400"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- LEFT COLUMN: Microphone Input -->
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Microphone Input" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    
+                    <TextBlock Text="Input Device" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ComboBox ItemsSource="{Binding MicrophoneDevices}"
+                              SelectedItem="{Binding SelectedMicrophone, Mode=TwoWay}"
+                              DisplayMemberPath="Name"
+                              Background="#2a2a4a"
+                              Foreground="Black"
+                              BorderBrush="{StaticResource BackgroundLightBrush}"
+                              BorderThickness="1"
+                              Padding="8,4"
+                              MaxDropDownHeight="240"/>
+                    
+                    <!-- Mic Gain -->
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Mic Gain" Opacity="0.8" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding MicGainDisplay}" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider Value="{Binding MicGainDb, Mode=TwoWay}" 
+                            Minimum="-12" Maximum="12" 
+                            TickFrequency="3" IsSnapToTickEnabled="False"
+                            Margin="0,6,0,0"/>
+                    
+                    <!-- Level Meter -->
+                    <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        
+                        <Border Background="#1a1f33" CornerRadius="4" Height="14">
+                            <Grid>
+                                <Border x:Name="SettingsMicLevel" 
+                                        Background="{StaticResource AccentGreenBrush}" 
+                                        CornerRadius="3" 
+                                        HorizontalAlignment="Left"
+                                        Margin="2">
+                                    <Border.Width>
+                                        <MultiBinding Converter="{StaticResource LevelToWidthConverter}" FallbackValue="0">
+                                            <Binding Path="MicLevel"/>
+                                            <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                        </MultiBinding>
+                                    </Border.Width>
+                                </Border>
+                                <Border Background="#ff5555" Opacity="0.3" CornerRadius="0,3,3,0" 
+                                        HorizontalAlignment="Right" Width="24" Margin="0,2,2,2"/>
+                            </Grid>
+                        </Border>
+                        
+                        <TextBlock Grid.Column="1" Text="CLIP" Margin="8,0,0,0"
+                                   Foreground="#ff5555" FontWeight="Bold" FontSize="10"
+                                   Visibility="{Binding IsClipping, Converter={StaticResource BoolToVis}}"/>
+                    </Grid>
+                    
+                    <!-- Test Mic Buttons -->
+                    <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                        <Button Content="Test Mic" Command="{Binding TestMicCommand}" 
+                                Style="{DynamicResource NavButton}" Padding="12,6" Margin="0,0,8,0"/>
+                        <Button Content="Stop" Command="{Binding StopTestMicCommand}" 
+                                Style="{DynamicResource NavButton}" Padding="12,6"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- RIGHT COLUMN: ATC Audio Output -->
+                <StackPanel Grid.Column="2">
+                    <TextBlock Text="ATC Audio Output" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    
+                    <TextBlock Text="Output Device" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <ComboBox ItemsSource="{Binding AtcOutputDevices}"
+                              SelectedItem="{Binding SelectedAtcOutput, Mode=TwoWay}"
+                              DisplayMemberPath="Name"
+                              Background="#2a2a4a"
+                              Foreground="Black"
+                              BorderBrush="{StaticResource BackgroundLightBrush}"
+                              BorderThickness="1"
+                              Padding="8,4"
+                              MaxDropDownHeight="240"/>
+                    
+                    <!-- ATC Volume -->
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="ATC Volume" Opacity="0.8" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Grid.Column="1" Text="{Binding AtcVolumeDisplay}" Foreground="{StaticResource AccentCyanBrush}" FontWeight="SemiBold"/>
+                    </Grid>
+                    <Slider Value="{Binding AtcVolumePercent, Mode=TwoWay}" 
+                            Minimum="0" Maximum="100" 
+                            TickFrequency="10" IsSnapToTickEnabled="False"
+                            Margin="0,6,0,0"/>
+                    
+                    <!-- ATC Playback Level Meter -->
+                    <Border Background="#1a1f33" CornerRadius="4" Height="14" Margin="0,12,0,0">
+                        <Grid>
+                            <Border Background="{StaticResource AccentCyanBrush}" 
+                                    CornerRadius="3" 
+                                    HorizontalAlignment="Left"
+                                    Margin="2">
+                                <Border.Width>
+                                    <MultiBinding Converter="{StaticResource LevelToWidthConverter}" FallbackValue="0">
+                                        <Binding Path="AtcPlaybackLevel"/>
+                                        <Binding Path="ActualWidth" RelativeSource="{RelativeSource AncestorType=Border}"/>
+                                    </MultiBinding>
+                                </Border.Width>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    
+                    <!-- Test ATC Audio Button -->
+                    <Button Content="Test ATC Audio" Command="{Binding TestAtcCommand}" 
+                            Style="{DynamicResource NavButton}" Padding="12,6" Margin="0,12,0,0"
+                            HorizontalAlignment="Left"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- SimBrief Section -->
+            <StackPanel Grid.Row="2" Margin="0,32,0,0" MaxWidth="400" HorizontalAlignment="Left">
+                <TextBlock Text="SimBrief" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="Pilot ID" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Text="{Binding SimBriefId, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#2a2a4a"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BackgroundLightBrush}"
+                         BorderThickness="1"
+                         Padding="8,4"/>
+            </StackPanel>
+
+            <!-- Save Button -->
+            <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,24,0,0">
+                <Button Content="Save" Command="{Binding SaveCommand}" MinWidth="120" Style="{DynamicResource PrimaryNavButton}" Padding="12,8"/>
+                <TextBlock Text="{Binding StatusText}" Margin="12,8,0,0" Opacity="0.8" Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"/>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

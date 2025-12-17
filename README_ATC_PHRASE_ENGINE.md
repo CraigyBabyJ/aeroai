@@ -20,6 +20,12 @@ AEROAI_VOICE_PROFILE=some_profile_id (optional override)
 AEROAI_VOICE_GIBRALTAR=english|spanish (defaults to english)
 ```
 
+## Prompt + validation
+- Default system prompt path is `prompts/aeroai_finetuned_prompt.txt` (override with `AEROAI_SYSTEM_PROMPT_PATH` if you want `aeroai_system_prompt.txt` instead).
+- Pass a `FlightContext` into `AeroAiPhraseEngine.GenerateAtcTransmissionAsync` to enable `AtcResponseValidator`; if the LLM invents a runway/squawk/altitude/frequency/SID not in context, the engine logs the rejection and emits a deterministic fallback clearance.
+- Readback flow uses `ReadbackValidator`/`ReadbackNormalizer` plus `SpokenNumberNormalizer` and `CallsignValidator` to keep transcripts consistent before hitting the LLM.
+- Debug logging: `AEROAI_LOG_FILE` appends prompt/response blocks; `AEROAI_LOG_API` re-enables the verbose API request/response dump.
+
 ## Voice profiles (regional voices)
 - Profiles live in `voices/*.json` with fields: `id`, `display_name`, `tts_model`, `tts_voice`, `style_hint` (future use), `speaking_rate`, `region_codes`, `controller_types`.
 - Use ICAO prefixes in `region_codes` to apply by country/region (e.g., `LX` applies to all LX* airports). Gibraltar samples use `region_codes: ["LX"]`.

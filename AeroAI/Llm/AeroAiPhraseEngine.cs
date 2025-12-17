@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using AeroAI.Atc;
+using AeroAI.Data;
 
 namespace AeroAI.Llm;
 
@@ -21,7 +22,12 @@ public sealed class AeroAiPhraseEngine : IDisposable
 		_systemPrompt = LoadSystemPrompt(systemPromptPath);
 	}
 
-	public async Task<string> GenerateAtcTransmissionAsync(AtcContext context, string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
+	public Task<string> GenerateAtcTransmissionAsync(AtcContext context, string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
+	{
+		return GenerateAtcTransmissionAsync(context, pilotTransmission, null, cancellationToken);
+	}
+
+	public async Task<string> GenerateAtcTransmissionAsync(AtcContext context, string pilotTransmission, FlightContext? flightContext, CancellationToken cancellationToken = default(CancellationToken))
 	{
 		if (string.IsNullOrWhiteSpace(pilotTransmission))
 		{
@@ -39,7 +45,18 @@ public sealed class AeroAiPhraseEngine : IDisposable
 		{
 			LogApiResponse(response);
 		}
-		return response.Trim();
+
+		string trimmed = response.Trim();
+		if (flightContext != null)
+		{
+			var validation = AtcResponseValidator.Validate(trimmed, context, flightContext);
+			if (!validation.IsValid)
+			{
+				LogValidationFailure(trimmed, validation);
+				return BuildSafeFallback(context, flightContext);
+			}
+		}
+		return trimmed;
 	}
 
 	private static bool ShouldLogApiRequests()
@@ -164,6 +181,94 @@ public sealed class AeroAiPhraseEngine : IDisposable
 		string log = sb.ToString();
 		Console.Write(log);
 		WriteToLogFile(log);
+	}
+
+	private static void LogValidationFailure(string response, AtcResponseValidationResult validation)
+	{
+		var sb = new StringBuilder();
+		sb.AppendLine("[ATC RESPONSE VALIDATION] LLM response rejected; using deterministic fallback.");
+		if (validation.Reasons.Count > 0)
+		{
+			sb.AppendLine("Reasons: " + string.Join("; ", validation.Reasons));
+		}
+		if (validation.OffendingTokens.Count > 0)
+		{
+			sb.AppendLine("Tokens: " + string.Join(", ", validation.OffendingTokens));
+		}
+		sb.AppendLine("Response:");
+		sb.AppendLine(response);
+
+		var log = sb.ToString();
+		Console.Write(log);
+		WriteToLogFile(log);
+	}
+
+	private string BuildSafeFallback(AtcContext context, FlightContext flightContext)
+	{
+		var callsign = ResolveCallsign(flightContext, context);
+		var phase = context?.Phase?.ToUpperInvariant() ?? string.Empty;
+		var clearanceType = context?.ClearanceDecision?.ClearanceType ?? string.Empty;
+
+		if (phase == "CLEARANCE" || clearanceType == "IFR_CLEARANCE")
+		{
+			if (ClearanceHelpers.ClearanceDataComplete(context))
+			{
+				return BuildDeterministicClearance(context, flightContext, callsign);
+			}
+			return $"{callsign}, standby for clearance.";
+		}
+
+		return phase switch
+		{
+			"TAXI_OUT" or "TAXI_IN" => $"{callsign}, say again for taxi.",
+			"LINEUP" or "FINAL" => $"{callsign}, standby.",
+			"CLIMB" or "ENROUTE" or "DESCENT" or "APPROACH" => $"{callsign}, say again.",
+			_ => $"{callsign}, say again."
+		};
+	}
+
+	private static string ResolveCallsign(FlightContext flightContext, AtcContext context)
+	{
+		if (!string.IsNullOrWhiteSpace(flightContext.RadioCallsign))
+			return flightContext.RadioCallsign;
+		if (!string.IsNullOrWhiteSpace(flightContext.Callsign))
+			return flightContext.Callsign;
+		if (!string.IsNullOrWhiteSpace(context?.FlightInfo?.Callsign))
+			return context.FlightInfo.Callsign;
+		return "Aircraft";
+	}
+
+	private static string BuildDeterministicClearance(AtcContext context, FlightContext flightContext, string callsign)
+	{
+		var resolvedDestination = AirportNameResolver.ResolveAirportName(flightContext.DestinationIcao, flightContext);
+		string clearedTo = context.ClearanceDecision.ClearedTo
+			?? (!string.IsNullOrWhiteSpace(resolvedDestination) ? resolvedDestination : (!string.IsNullOrWhiteSpace(flightContext.DestinationName) ? flightContext.DestinationName : flightContext.DestinationIcao ?? "destination"));
+		if (!string.IsNullOrWhiteSpace(flightContext.DestinationIcao) &&
+		    string.Equals(clearedTo, flightContext.DestinationIcao, StringComparison.OrdinalIgnoreCase))
+		{
+			clearedTo = flightContext.DestinationName ?? "destination airport";
+		}
+
+		string depRunway = context.ClearanceDecision.DepRunway
+			?? flightContext.SelectedDepartureRunway
+			?? flightContext.DepartureRunway?.RunwayIdentifier
+			?? "runway";
+
+		string sid = !string.IsNullOrWhiteSpace(context.ClearanceDecision.Sid)
+			? context.ClearanceDecision.Sid
+			: (!string.IsNullOrWhiteSpace(flightContext.SelectedSID) ? flightContext.SelectedSID : "radar vectors");
+
+		string initialClimb = context.ClearanceDecision.InitialAltitudeFt.HasValue
+			? $"{context.ClearanceDecision.InitialAltitudeFt.Value} feet"
+			: "initial altitude";
+
+		string squawk = context.ClearanceDecision.Squawk ?? flightContext.SquawkCode ?? "XXXX";
+
+		string expectFl = !string.IsNullOrWhiteSpace(context.FlightInfo?.CruiseLevel)
+			? context.FlightInfo.CruiseLevel!
+			: (flightContext.CruiseFlightLevel > 0 ? $"FL{flightContext.CruiseFlightLevel}" : "cruise flight level");
+
+		return $"{callsign}, cleared to {clearedTo} via {sid} departure, then as filed. Departure runway {depRunway}, initial climb {initialClimb}, squawk {squawk}, expect {expectFl} ten minutes after departure.";
 	}
 
 	public void Dispose()

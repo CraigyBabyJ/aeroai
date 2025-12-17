@@ -8,8 +8,13 @@ namespace AtcNavDataDemo.SimBrief;
 public sealed class FlightPlan
 {
     public string OriginIcao { get; init; } = string.Empty;
+    public string OriginName { get; init; } = string.Empty;
+    public string? OriginMetar { get; init; }
     public string DestinationIcao { get; init; } = string.Empty;
+    public string DestinationName { get; init; } = string.Empty;
+    public string? DestinationMetar { get; init; }
     public string AlternateIcao { get; init; } = string.Empty;
+    public string AircraftIcao { get; init; } = string.Empty;
 
     /// <summary>
     /// Planned departure runway from SimBrief (may be empty if not provided).

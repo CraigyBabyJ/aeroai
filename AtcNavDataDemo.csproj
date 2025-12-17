@@ -10,6 +10,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.9.0" />
+    <PackageReference Include="xunit" Version="2.6.6" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.6" />
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
   </ItemGroup>
   <!-- Exclude the new WPF UI project files from this console build -->
   <ItemGroup>
@@ -19,6 +23,7 @@
   <ItemGroup>
     <None Include="Data\airport-frequencies.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Data\airlines.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Data\aircraft_type.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Config\audio-effects.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="voices\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Assets\Audio\**\*.mp3" CopyToOutputDirectory="PreserveNewest" />

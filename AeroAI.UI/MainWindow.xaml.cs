@@ -1,15 +1,25 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using AtcNavDataDemo.Config;
+using AeroAI.Config;
 using AeroAI.UI.Dialogs;
 using AeroAI.UI.Services;
+using AeroAI.UI.ViewModels;
+using AeroAI.Atc;
+using AeroAI.Audio;
+using AeroAI.Data;
+using NAudio.Wave;
 
 namespace AeroAI.UI;
 
@@ -17,10 +27,26 @@ public partial class MainWindow : Window
 {
     public ObservableCollection<ChatMessage> Messages { get; } = new();
     private readonly AtcService _atcService;
+    private readonly MicrophoneRecorder _recorder = new();
+    private readonly ISttService _sttService;
+    private readonly ISttCorrectionLayer _sttCorrectionLayer;
+    private readonly FlightLogService _flightLogService = new();
+    private readonly Action<string> _sttDebugLog;
     private bool _isProcessing;
+    private bool _isTranscribing;
     private string _lastAtcMessage = string.Empty;
     private bool _firstPilotContact = true;
+    private readonly SolidColorBrush _recordingBrush = new(Color.FromRgb(0xff, 0x55, 0x55));
+    private readonly SolidColorBrush _transcribingBrush = new(Color.FromRgb(0xff, 0xa5, 0x00));
+    private SolidColorBrush? _idleMicBrush;
+    private SolidColorBrush? _idleButtonBrush;
+    private SolidColorBrush? _idleBadgeBrush;
+    private Storyboard? _recordingPulse;
+    private bool _debugEnabled;
     private static readonly Lazy<HashSet<string>> AircraftTypes = new(() => LoadAircraftTypes(), isThreadSafe: true);
+    private UserConfig _config = new();
+    private List<AudioDeviceOption> _micDevices = new();
+    private List<AudioDeviceOption> _outputDevices = new();
 
     public MainWindow()
     {
@@ -30,12 +56,42 @@ public partial class MainWindow : Window
         _atcService = new AtcService();
         _atcService.OnAtcMessage += OnAtcMessageReceived;
         _atcService.OnFlightContextUpdated += OnFlightContextUpdated;
+        _atcService.OnDebug += OnDebugReceived;
+
+        _sttDebugLog = msg =>
+        {
+            System.Diagnostics.Debug.WriteLine(msg);
+            Console.WriteLine(msg);
+            if (_debugEnabled)
+            {
+                Dispatcher.Invoke(() => AddSystemMessage("[DEBUG] " + msg));
+            }
+        };
+        _sttService = CreateSttService();
+        _sttCorrectionLayer = new SttCorrectionLayer(LogSttCorrection);
+        _idleMicBrush = TryFindResource("TextSecondaryBrush") as SolidColorBrush ?? new SolidColorBrush(Colors.Gray);
+        _idleButtonBrush = TryFindResource("BackgroundLightBrush") as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(0x1f, 0x40, 0x68));
+        _idleBadgeBrush = TryFindResource("BackgroundMediumBrush") as SolidColorBrush ?? new SolidColorBrush(Color.FromRgb(0x23, 0x33, 0x4d));
+        
+        // Hook up mic level for VHF-style bar
+        _recorder.OnAudioLevel += level => Dispatcher.Invoke(() => UpdateMicLevelBar(level));
+        ResetPushToTalkUi();
+        StateChanged += (_, _) => UpdateMaxRestoreIcon();
+        UpdateMaxRestoreIcon();
+        InitializeUserConfigAndAudio();
+
+        if (!_sttService.IsAvailable)
+        {
+            PttButton.IsEnabled = false;
+            AddSystemMessage("Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models");
+        }
     }
 
     private void OnAtcMessageReceived(string station, string message)
     {
         Dispatcher.Invoke(() =>
         {
+            UpdateStationBadge(station);
             AddAtcMessage(station, message);
         });
     }
@@ -48,16 +104,48 @@ public partial class MainWindow : Window
             AircraftType.Text = $"[{context.Aircraft?.IcaoType ?? "---"}]";
             AirportIcao.Text = context.OriginIcao ?? "----";
             DestIcao.Text = context.DestinationIcao ?? "---";
-            FlightIdText.Text = context.Callsign ?? "---";
-            FlightIdDisplay.Text = context.Callsign ?? "---";
+            FlightIdDisplay.Text = context.CanonicalCallsign ?? context.RawCallsign ?? context.Callsign ?? "---";
+
+            // UI should be resilient if the weather hasn't populated into the context yet.
+            var atisLetter = context.DepartureAtisLetter;
+            var metar = context.OriginWeather?.RawMetar;
+            if (!string.IsNullOrWhiteSpace(context.OriginIcao))
+            {
+                var cached = AtisMetarCache.Get(context.OriginIcao);
+                atisLetter = string.IsNullOrWhiteSpace(atisLetter) ? cached.AtisLetter : atisLetter;
+                metar = string.IsNullOrWhiteSpace(metar) ? cached.RawMetar : metar;
+            }
+
+            AtisLetterDisplay.Text = string.IsNullOrWhiteSpace(atisLetter) ? "Info ---" : $"Info {ToAtisPhonetic(atisLetter)}";
+            MetarDisplay.Text = string.IsNullOrWhiteSpace(metar) ? "---" : CollapseWhitespace(metar);
+
+            bool clearanceIssued = context.CurrentAtcState == AtcState.ClearanceIssued;
+            var depRunway = context.SelectedDepartureRunway ?? context.DepartureRunway?.RunwayIdentifier;
+            AdvisoryRunwayDisplay.Text = string.IsNullOrWhiteSpace(depRunway) ? "---" : depRunway;
+            DepRunwayDisplay.Text = clearanceIssued && !string.IsNullOrWhiteSpace(depRunway) ? depRunway : "---";
+
+            // Show initial cleared altitude only after clearance.
+            int initAlt = context.ClearedAltitude ?? (context.CruiseFlightLevel > 300 ? 5000 : 3000);
+            InitAltDisplay.Text = clearanceIssued && initAlt > 0 ? $"{initAlt} ft" : "---";
+            UpdateStationBadge(_atcService.GetCurrentStation());
             
-            if (!string.IsNullOrEmpty(context.SquawkCode))
+            if (clearanceIssued && !string.IsNullOrEmpty(context.SquawkCode))
             {
                 SquawkDisplay.Text = context.SquawkCode;
                 XpdrCode.Text = context.SquawkCode;
             }
+            else
+            {
+                SquawkDisplay.Text = "----";
+                XpdrCode.Text = "----";
+            }
 
             // Get frequencies from lookup
+            ClrFreq.Text = "---";
+            GndFreq.Text = "---";
+            TwrFreq.Text = "---";
+            DepFreq.Text = "---";
+            Com1Freq.Text = "---";
             if (AeroAI.Data.AirportFrequencies.TryGetFrequencies(context.OriginIcao, out var freqs))
             {
                 if (freqs.Clearance is double clr) ClrFreq.Text = clr.ToString("F3");
@@ -65,30 +153,230 @@ public partial class MainWindow : Window
                 {
                     var freq = gnd.ToString("F3");
                     GndFreq.Text = freq;
-                    Com1Freq.Text = freq;
+                    if (string.IsNullOrWhiteSpace(Com1Freq.Text) || Com1Freq.Text == "---")
+                        Com1Freq.Text = freq;
                 }
                 if (freqs.Tower is double twr) TwrFreq.Text = twr.ToString("F3");
                 if (freqs.Departure is double dep) DepFreq.Text = dep.ToString("F3");
+
+                // Prefer clearance/delivery for COM1 if available, else ground, else tower.
+                if (freqs.Clearance is double clrPref)
+                    Com1Freq.Text = clrPref.ToString("F3");
+                else if (freqs.Ground is double gndPref)
+                    Com1Freq.Text = gndPref.ToString("F3");
+                else if (freqs.Tower is double twrPref)
+                    Com1Freq.Text = twrPref.ToString("F3");
             }
 
             // Update airport name (would need lookup)
-            AirportName.Text = GetAirportName(context.OriginIcao);
+            AirportName.Text = AirportNameResolver.ResolveAirportName(context.OriginIcao, _atcService.CurrentFlight);
         });
     }
 
-    private string GetAirportName(string? icao)
+    private static string CollapseWhitespace(string value)
     {
-        return icao?.ToUpperInvariant() switch
+        var trimmed = value.Trim();
+        return Regex.Replace(trimmed, "\\s+", " ");
+    }
+
+    private static string ToAtisPhonetic(string atisLetter)
+    {
+        if (string.IsNullOrWhiteSpace(atisLetter))
+            return "---";
+
+        var c = char.ToUpperInvariant(atisLetter.Trim()[0]);
+        return c switch
         {
-            "EGCC" => "Manchester Airport",
-            "EGLL" => "Heathrow Airport",
-            "EGKK" => "Gatwick Airport",
-            "EGPH" => "Edinburgh Airport",
-            "EHAM" => "Schiphol Airport",
-            "LFPG" => "Paris CDG",
-            "KJFK" => "JFK International",
-            _ => "Airport"
+            'A' => "Alfa",
+            'B' => "Bravo",
+            'C' => "Charlie",
+            'D' => "Delta",
+            'E' => "Echo",
+            'F' => "Foxtrot",
+            'G' => "Golf",
+            'H' => "Hotel",
+            'I' => "India",
+            'J' => "Juliett",
+            'K' => "Kilo",
+            'L' => "Lima",
+            'M' => "Mike",
+            'N' => "November",
+            'O' => "Oscar",
+            'P' => "Papa",
+            'Q' => "Quebec",
+            'R' => "Romeo",
+            'S' => "Sierra",
+            'T' => "Tango",
+            'U' => "Uniform",
+            'V' => "Victor",
+            'W' => "Whiskey",
+            'X' => "X-ray",
+            'Y' => "Yankee",
+            'Z' => "Zulu",
+            _ => c.ToString()
         };
+    }
+
+    private void ResetPushToTalkUi()
+    {
+        PttButton.Content = "Hold to talk";
+        PttButton.Background = _idleButtonBrush ?? new SolidColorBrush(Color.FromRgb(0x1f, 0x40, 0x68));
+        PttStateBadge.Background = _idleBadgeBrush ?? new SolidColorBrush(Color.FromRgb(0x23, 0x33, 0x4d));
+        PttSpinner.Visibility = Visibility.Collapsed;
+        
+        // Turn off TX indicator
+        Com1TxLight.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+        PttButton.IsEnabled = true;
+        UpdateMicLevelBar(0); // Reset mic level bar
+    }
+
+    private void SetPushToTalkRecording()
+    {
+        PttButton.Content = "Release to send";
+        PttButton.Background = _recordingBrush;
+        PttStateBadge.Background = _recordingBrush;
+        PttSpinner.Visibility = Visibility.Collapsed;
+        PttButton.IsEnabled = true;
+        
+        // Light up TX indicator (pilot transmitting)
+        Com1TxLight.Background = new SolidColorBrush(Color.FromRgb(255, 80, 80)); // Red
+    }
+
+    private void SetPushToTalkTranscribing()
+    {
+        PttButton.Content = "Transcribing...";
+        PttButton.Background = _transcribingBrush;
+        PttStateBadge.Background = _transcribingBrush;
+        PttSpinner.Visibility = Visibility.Visible;
+        PttButton.IsEnabled = false;
+        UpdateMicLevelBar(0); // Reset mic level bar
+    }
+
+    /// <summary>
+    /// Update the VHF-style mic level bar (0.0 to 1.0).
+    /// </summary>
+    private void UpdateMicLevelBar(double level)
+    {
+        if (MicLevelBar == null) return;
+        
+        // Clamp to 0-1 range
+        level = Math.Clamp(level, 0.0, 1.0);
+        
+        // Get parent width for scaling
+        var parent = MicLevelBar.Parent as FrameworkElement;
+        var maxWidth = (parent?.ActualWidth ?? 150) - 2; // Account for margin
+        
+        MicLevelBar.Width = maxWidth * level;
+    }
+
+    private void PttButton_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        StartPushToTalk();
+    }
+
+    private async void PttButton_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        await FinishPushToTalkAsync();
+    }
+
+    private async void PttButton_LostMouseCapture(object sender, MouseEventArgs e)
+    {
+        if (_recorder.IsRecording)
+            await FinishPushToTalkAsync();
+    }
+
+    private void StartPushToTalk()
+    {
+        if (_isProcessing || _isTranscribing)
+            return;
+
+        if (!_sttService.IsAvailable)
+        {
+            AddSystemMessage("Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models");
+            return;
+        }
+
+        if (!_atcService.IsInitialized)
+        {
+            AddSystemMessage("No flight loaded. Import a SimBrief plan before using push-to-talk.");
+            return;
+        }
+
+        try
+        {
+            _recorder.StartRecording();
+            SetPushToTalkRecording();
+        }
+        catch (Exception ex)
+        {
+            ResetPushToTalkUi();
+            AddSystemMessage($"Microphone error: {ex.Message}");
+        }
+    }
+
+    private async Task FinishPushToTalkAsync()
+    {
+        if (_isTranscribing || !_recorder.IsRecording)
+            return;
+
+        _isTranscribing = true;
+        SetPushToTalkTranscribing();
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+            var wavPath = await _recorder.StopRecordingAsync(cts.Token);
+            if (string.IsNullOrWhiteSpace(wavPath))
+            {
+                AddSystemMessage("Did not capture audio. Please try again.");
+                return;
+            }
+
+            string? transcript = null;
+            try
+            {
+                transcript = await _sttService.TranscribeAsync(wavPath, cts.Token);
+            }
+            finally
+            {
+                TryDeleteFile(wavPath);
+            }
+
+            if (string.IsNullOrWhiteSpace(transcript))
+            {
+                AddSystemMessage("Did not catch any speech. Please try again.");
+            }
+            else
+            {
+                // Apply STT corrections first, then use centralized normalizer
+                var corrected = _sttCorrectionLayer.Apply(transcript);
+                var flight = _atcService.CurrentFlight;
+                if (flight != null)
+                {
+                    var normalized = PilotTransmissionNormalizer.Normalize(corrected, flight, enableDebugLogging: _debugEnabled);
+                    AddSystemMessage($"Heard: \"{corrected}\"");
+                    await ProcessPilotInputAsync(normalized);
+                }
+                else
+                {
+                    AddSystemMessage($"Heard: \"{corrected}\"");
+                    await ProcessPilotInputAsync(corrected);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            AddSystemMessage("Speech timeout. Please try again.");
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"Speech error: {ex.Message}");
+        }
+        finally
+        {
+            _isTranscribing = false;
+            ResetPushToTalkUi();
+        }
     }
 
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
@@ -98,6 +386,34 @@ public partial class MainWindow : Window
     }
 
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void MaxRestore_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        UpdateMaxRestoreIcon();
+    }
+
+    private void UpdateMaxRestoreIcon()
+    {
+        if (MaxRestoreButton == null)
+            return;
+
+        MaxRestoreButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
+    }
+
+    private void StartRecordingPulse()
+    {
+        // No longer needed - mic level bar provides visual feedback
+    }
+
+    private void StopRecordingPulse()
+    {
+        if (_recordingPulse != null)
+        {
+            _recordingPulse.Stop();
+            _recordingPulse = null;
+        }
+    }
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
     private async void PilotInput_KeyDown(object sender, KeyEventArgs e)
@@ -113,9 +429,12 @@ public partial class MainWindow : Window
 
     private void AddPilotMessage(string message)
     {
+        var callsign = _atcService.CurrentFlight?.Callsign ?? _atcService.CurrentFlight?.RawCallsign ?? "Pilot";
+        var stationLabel = string.IsNullOrWhiteSpace(callsign) ? "Pilot" : $"Pilot ({callsign})";
+        _flightLogService.Log("PILOT", message);
         Messages.Add(new ChatMessage
         {
-            Station = _atcService.GetCurrentStation(),
+            Station = stationLabel,
             Message = "<< " + message,
             Background = new SolidColorBrush(Color.FromRgb(0x16, 0x21, 0x3e)),
             MessageColor = new SolidColorBrush(Colors.White)
@@ -126,6 +445,7 @@ public partial class MainWindow : Window
     private void AddAtcMessage(string station, string message)
     {
         _lastAtcMessage = message;
+        _flightLogService.Log("ATC", message);
         Messages.Add(new ChatMessage
         {
             Station = station,
@@ -138,6 +458,7 @@ public partial class MainWindow : Window
 
     private void AddSystemMessage(string message)
     {
+        _flightLogService.Log("SYSTEM", message);
         Messages.Add(new ChatMessage
         {
             Station = "SYSTEM",
@@ -161,16 +482,41 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!PilotCallsignPresent(text))
+        // Use centralized normalizer if flight is loaded
+        var flight = _atcService.CurrentFlight;
+        if (flight != null)
         {
-            AddSystemMessage("Who is calling? Please include your callsign at the end of the transmission (e.g., \"request clearance ... BAW123\").");
-            return;
+            text = PilotTransmissionNormalizer.Normalize(text, flight, enableDebugLogging: _debugEnabled);
         }
 
-        if (_firstPilotContact && IsClearanceRequest(text) && !ContainsAircraftType(text))
+        bool allowAnywhereCallsign = _firstPilotContact && IsClearanceRequest(text);
+
+        // CALLSIGN GATING: Only run if callsign is NOT already known (session-sticky).
+        // Once FlightContext.Callsign or CanonicalCallsign is set, NEVER ask "Who is calling?" again.
+        // Also skip if any pending confirmation is active (readback, destination, ATIS).
+        var callsignKnown = !string.IsNullOrWhiteSpace(flight?.Callsign) || !string.IsNullOrWhiteSpace(flight?.CanonicalCallsign);
+        
+        if (!callsignKnown && !_atcService.HasPendingConfirmation)
         {
-            AddSystemMessage("Please include your aircraft type (ICAO) in the first transmission (e.g., \"request clearance A320 ... BAW123\").");
-            return;
+            if (!CallsignValidator.IsPresent(text, _atcService.CurrentFlight, allowAnywhereCallsign))
+            {
+                var prompt = allowAnywhereCallsign
+                    ? "Who is calling? Please include your callsign (e.g., \"this is BAW123 requesting clearance\")."
+                    : "Who is calling? Please include your callsign at the end of the transmission (e.g., \"request taxi ... BAW123\").";
+                AddSystemMessage(prompt);
+                _ = _atcService.SpeakAtcAsync(prompt);
+                return;
+            }
+
+            if (_firstPilotContact && IsClearanceRequest(text) && !ContainsAircraftType(text))
+            {
+                // Log the pilot attempt but require explicit aircraft type on first contact.
+                AddPilotMessage(text);
+                var prompt = "Please include your aircraft type (ICAO) in the first transmission (e.g., \"request clearance A320 ... BAW123\").";
+                AddSystemMessage(prompt);
+                _ = _atcService.SpeakAtcAsync(prompt);
+                return;
+            }
         }
 
         _isProcessing = true;
@@ -179,7 +525,13 @@ public partial class MainWindow : Window
 
         try
         {
+            // Light up RX indicator (ATC transmitting)
+            Com1RxLight.Background = new SolidColorBrush(Color.FromRgb(80, 255, 80)); // Green
+            
             var response = await _atcService.SendPilotMessageAsync(text);
+            
+            // Turn off RX indicator
+            Com1RxLight.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
             
             if (string.IsNullOrEmpty(response))
             {
@@ -188,6 +540,8 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            // Turn off RX indicator on error
+            Com1RxLight.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
             AddSystemMessage($"Error: {ex.Message}");
         }
         finally
@@ -201,6 +555,7 @@ public partial class MainWindow : Window
         Messages.Clear();
         _atcService.ResetFlight();
         _firstPilotContact = true;
+        _flightLogService.Dispose();
         AddSystemMessage("Flight reset. Import a new flight plan from SimBrief.");
     }
 
@@ -211,7 +566,7 @@ public partial class MainWindow : Window
 
         if (dialog.WasImported && !string.IsNullOrEmpty(dialog.PilotId))
         {
-            await LoadFlightPlanAsync(dialog.PilotId);
+            await LoadFlightPlanAsync(dialog.PilotId, forceRefresh: true, clearMessages: true);
         }
     }
 
@@ -226,23 +581,33 @@ public partial class MainWindow : Window
             return;
         }
 
-        await LoadFlightPlanAsync(pilotId);
+        await LoadFlightPlanAsync(pilotId, forceRefresh: true, clearMessages: true);
     }
 
-    private async Task LoadFlightPlanAsync(string pilotId)
+    private async Task LoadFlightPlanAsync(string pilotId, bool forceRefresh = false, bool clearMessages = false)
     {
-        AddSystemMessage($"Loading flight plan from SimBrief...");
+        AddSystemMessage(forceRefresh
+            ? "Loading flight plan from SimBrief (fresh fetch)..."
+            : "Loading flight plan from SimBrief...");
 
         try
         {
-            await _atcService.InitializeAsync(pilotId);
+            // Reset state before loading a new/updated plan.
+            _atcService.ResetFlight();
+            _firstPilotContact = true;
+            _lastAtcMessage = string.Empty;
+
+            await _atcService.InitializeAsync(pilotId, forceRefresh);
 
             var flight = _atcService.CurrentFlight;
             if (flight != null)
             {
+                if (clearMessages)
+                    Messages.Clear();
+
                 AddSystemMessage($"Flight loaded: {flight.Callsign} {flight.OriginIcao} -> {flight.DestinationIcao}");
-                AddSystemMessage($"Runway: {flight.SelectedDepartureRunway ?? "---"}, SID: {flight.SelectedSID ?? "---"}");
                 AddSystemMessage("Ready for clearance request.");
+                _flightLogService.StartNewLog(flight.OriginIcao, flight.DestinationIcao, flight.Callsign ?? flight.RawCallsign);
                 _firstPilotContact = true;
             }
         }
@@ -286,35 +651,147 @@ public partial class MainWindow : Window
         }
     }
 
+    private static void TryDeleteFile(string? path)
+    {
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // ignore cleanup failures
+        }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _atcService?.Dispose();
+        _recorder?.Dispose();
+        if (_sttCorrectionLayer is IDisposable disposable)
+            disposable.Dispose();
+        if (_sttService is IDisposable sttDisposable)
+            sttDisposable.Dispose();
+        _flightLogService?.Dispose();
         base.OnClosed(e);
     }
 
-    private bool PilotCallsignPresent(string text)
+    private void OnDebugReceived(string message)
     {
-        var flight = _atcService.CurrentFlight;
-        if (flight == null)
-            return true; // cannot validate without context
-
-        var trimmed = text.Trim();
-        var candidate = flight.Callsign ?? flight.RawCallsign ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(candidate))
-            return true;
-
-        string Normalize(string s) => s.Trim().TrimEnd('.', ',', ';', '?', '!', ' ');
-
-        var normInput = Normalize(trimmed).ToUpperInvariant();
-        var normCall = Normalize(candidate).ToUpperInvariant();
-
-        // Accept if the callsign appears at the end
-        return normInput.EndsWith(normCall, StringComparison.OrdinalIgnoreCase);
+        if (_debugEnabled)
+            AddSystemMessage("[DEBUG] " + message);
     }
+
+    private ISttService CreateSttService()
+    {
+        LoadDotEnvIfPresent();
+
+        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? "whisper").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(backend))
+            backend = "whisper";
+
+        var whisperCli = new WhisperSttService();
+        ISttService? whisperFast = null;
+
+        if (backend == "whisper-fast")
+        {
+            var python = Environment.GetEnvironmentVariable("WHISPER_FAST_PYTHON")
+                         ?? ResolveUpwards("whisper-fast\\venv\\Scripts\\python.exe");
+            var serverPath = ResolveUpwards("whisper-fast\\service.py");
+            var model = Environment.GetEnvironmentVariable("WHISPER_FAST_MODEL")
+                        ?? "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper";
+            var portEnv = Environment.GetEnvironmentVariable("WHISPER_FAST_PORT");
+            var port = 8765;
+            if (!string.IsNullOrWhiteSpace(portEnv) && int.TryParse(portEnv, out var parsedPort) && parsedPort > 0)
+                port = parsedPort;
+
+            if (!string.IsNullOrWhiteSpace(python) && File.Exists(python) && !string.IsNullOrWhiteSpace(serverPath) && File.Exists(serverPath))
+            {
+                var host = new WhisperFastHost(python, serverPath, model, port, _sttDebugLog);
+                // Start asynchronously at launch; failures will be logged and per-request fallback will use whisper-cli.
+                _ = Task.Run(async () =>
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                    await host.StartAsync(cts.Token);
+                });
+                whisperFast = new WhisperFastSttService(host, _sttDebugLog, available: true);
+            }
+            else
+            {
+                _sttDebugLog?.Invoke("[STT] whisper-fast unavailable (python/server missing), using whisper-cli");
+                backend = "whisper";
+            }
+        }
+
+        _sttDebugLog?.Invoke($"[STT] selected backend={backend}, fast_available={(whisperFast != null ? "yes" : "no")}, cli_available={(whisperCli.IsAvailable ? "yes" : "no")}");
+        return new SttBackendRouter(whisperCli, whisperFast, backend, _sttDebugLog);
+    }
+
+    private static void LoadDotEnvIfPresent()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, ".env");
+        if (!File.Exists(path))
+        {
+            // Walk upwards to repo root
+            for (var i = 0; i < 6; i++)
+            {
+                var candidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, string.Join(Path.DirectorySeparatorChar, Enumerable.Repeat("..", i)) , ".env"));
+                if (File.Exists(candidate))
+                {
+                    path = candidate;
+                    break;
+                }
+            }
+        }
+
+        if (!File.Exists(path))
+            return;
+
+        try
+        {
+            var lines = File.ReadAllLines(path);
+            foreach (var raw in lines)
+            {
+                var line = raw.Trim();
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                    continue;
+                var idx = line.IndexOf('=');
+                if (idx <= 0)
+                    continue;
+                var key = line[..idx].Trim();
+                var val = line[(idx + 1)..].Trim().Trim('"').Trim('\'');
+                if (Environment.GetEnvironmentVariable(key) == null)
+                    Environment.SetEnvironmentVariable(key, val);
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private static string ResolveUpwards(string relativePath)
+    {
+        var baseDir = AppContext.BaseDirectory;
+        for (var i = 0; i < 8; i++)
+        {
+            var candidate = Path.GetFullPath(Path.Combine(new[] { baseDir }.Concat(Enumerable.Repeat("..", i)).Concat(new[] { relativePath }).ToArray()));
+            if (File.Exists(candidate))
+                return candidate;
+        }
+
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
+    }
+
+    private void DebugToggle_Checked(object sender, RoutedEventArgs e) => _debugEnabled = true;
+    private void DebugToggle_Unchecked(object sender, RoutedEventArgs e) => _debugEnabled = false;
 
     private bool ContainsAircraftType(string text)
     {
         var flight = _atcService.CurrentFlight;
+        if (flight?.Aircraft?.IcaoType is { Length: > 0 })
+            return true; // already known from flight plan
+
         string? knownType = flight?.Aircraft?.IcaoType;
 
         var tokens = text.ToUpperInvariant().Split(new[] { ' ', ',', '.', ';', ':', '\t' }, StringSplitOptions.RemoveEmptyEntries);
@@ -323,6 +800,21 @@ public partial class MainWindow : Window
         {
             return true;
         }
+
+        // Accept common natural-speech aircraft references (e.g., "boeing 737", "airbus three twenty", "dash 8", "king air").
+        var joined = text.ToLowerInvariant();
+        if (joined.Contains("boeing") || joined.Contains("airbus") || joined.Contains("embraer") ||
+            joined.Contains("crj") || joined.Contains("cessna") || joined.Contains("piper") ||
+            joined.Contains("king air") || joined.Contains("dash 8") || joined.Contains("q400") ||
+            joined.Contains("atr") || joined.Contains("twin otter"))
+        {
+            return true;
+        }
+
+        // Use resolver against authoritative dataset.
+        var resolved = AircraftTypeResolver.ResolveSimple(text);
+        if (!string.IsNullOrWhiteSpace(resolved))
+            return true;
 
         var typeSet = AircraftTypes.Value;
         return tokens.Any(t => typeSet.Contains(t));
@@ -352,6 +844,129 @@ public partial class MainWindow : Window
         }
 
         return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string NormalizePilotTransmissionForFlight(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        var flight = _atcService.CurrentFlight;
+        if (flight == null)
+            return text;
+
+        var normalized = CallsignNormalizer.Normalize(text, flight);
+        normalized = ReadbackNormalizer.Normalize(normalized, flight);
+        return normalized;
+    }
+
+    private void UpdateStationBadge(string? stationText)
+    {
+        StationBadgeText.Text = string.IsNullOrWhiteSpace(stationText) ? "Delivery" : stationText;
+    }
+
+    private void LogSttCorrection(string message)
+    {
+        // Only surface applied-rule logs to the user; keep lifecycle noise in debug.
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+
+        System.Diagnostics.Debug.WriteLine(message);
+        Console.WriteLine(message);
+
+        if (message.StartsWith("[STT-CORR]", StringComparison.OrdinalIgnoreCase))
+        {
+            Dispatcher.Invoke(() => AddSystemMessage(message));
+        }
+    }
+
+    private void InitializeUserConfigAndAudio()
+    {
+        try
+        {
+            _config = UserConfigStore.Load() ?? new UserConfig();
+        }
+        catch
+        {
+            _config = new UserConfig();
+        }
+
+        try
+        {
+            LoadAudioDevices();
+            ApplyAudioSelection(
+                _config.Audio?.MicrophoneDeviceId, 
+                _config.Audio?.OutputDeviceId, 
+                _config.Audio?.MicGainDb ?? 0.0,
+                _config.Audio?.AtcOutputDeviceId,
+                _config.Audio?.AtcVolumePercent ?? 100);
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"Audio init fallback: {ex.Message}");
+        }
+
+        SetTabSelection(isSettings: false);
+    }
+
+    private void LoadAudioDevices()
+    {
+        try
+        {
+            var service = new AudioDeviceService();
+            _micDevices = service.GetInputDevices().ToList();
+            _outputDevices = service.GetOutputDevices().ToList();
+
+            // Pass recorder to SettingsViewModel for mic test and gain control
+            var settingsVm = new SettingsViewModel(service, _config, ApplyAudioSelection, _recorder);
+            var view = new Views.SettingsView { DataContext = settingsVm };
+            if (SettingsHost != null)
+                SettingsHost.Content = view;
+        }
+        catch (Exception ex)
+        {
+            _micDevices = new List<AudioDeviceOption>();
+            _outputDevices = new List<AudioDeviceOption>();
+            if (SettingsHost != null)
+                SettingsHost.Content = null;
+            AddSystemMessage($"Audio device enumeration failed: {ex.Message}");
+        }
+    }
+
+    private void ApplyAudioSelection(string? micId, string? outputId, double gainDb, string? atcOutputId, int atcVolumePercent)
+    {
+        _recorder.DeviceId = micId;
+        _recorder.DeviceNumber = null;
+        _recorder.GainDb = gainDb;
+        TtsPlayback.OutputDeviceId = atcOutputId ?? outputId; // ATC uses dedicated output if set
+        TtsPlayback.OutputDeviceNumber = -1;
+        TtsPlayback.Volume = atcVolumePercent / 100f;
+    }
+
+    private void TabAtcButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetTabSelection(isSettings: false);
+    }
+
+    private void TabSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        SetTabSelection(isSettings: true);
+    }
+
+    private void SetTabSelection(bool isSettings)
+    {
+        SettingsHost.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
+        ComBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        AirportInfoPanel.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        MessagesPanel.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        InputBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        BottomButtonsBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+
+        if (TabAtcButton != null && TabSettingsButton != null)
+        {
+            TabAtcButton.Style = TryFindResource(isSettings ? "NavButton" : "PrimaryNavButton") as Style ?? TabAtcButton.Style;
+            TabSettingsButton.Style = TryFindResource(isSettings ? "PrimaryNavButton" : "NavButton") as Style ?? TabSettingsButton.Style;
+        }
     }
 }
 

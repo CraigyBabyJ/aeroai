@@ -51,5 +51,11 @@ __pycache__/
 Thumbs.db
 
 
-whisper/models/*.bin
-whisper/models/*.gguf
+# Whisper binaries and models (local-only, do not commit)
+whisper/
+whisper-fast/
+whisper-fast/
+
+whisper-fast/venv/
+whisper-fast/*.pyc
+whisper-fast/__pycache__/

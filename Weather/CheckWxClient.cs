@@ -75,6 +75,15 @@ public sealed class CheckWxClient : IDisposable
             var visibility = 10000; // meters, default
             var ceiling = 0; // feet AGL
             var isIfr = false;
+            string? rawMetar = null;
+
+            // Raw METAR (best effort; CheckWX schema varies by endpoint/version)
+            if (metar.TryGetProperty("raw_text", out var rawText) && rawText.ValueKind == JsonValueKind.String)
+                rawMetar = rawText.GetString();
+            else if (metar.TryGetProperty("raw_observation", out var rawObs) && rawObs.ValueKind == JsonValueKind.String)
+                rawMetar = rawObs.GetString();
+            else if (metar.TryGetProperty("raw", out var raw) && raw.ValueKind == JsonValueKind.String)
+                rawMetar = raw.GetString();
 
             // Wind
             if (metar.TryGetProperty("wind", out var wind))
@@ -151,6 +160,7 @@ public sealed class CheckWxClient : IDisposable
             return new WeatherInfo
             {
                 AirportIcao = airportIcao,
+                RawMetar = rawMetar,
                 WindDirectionDegrees = windDir,
                 WindSpeedKnots = windSpeed,
                 VisibilityMeters = visibility,

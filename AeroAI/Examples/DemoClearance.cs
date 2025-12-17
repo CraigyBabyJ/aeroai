@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using AeroAI.Atc;
 using AeroAI.Config;
 using AeroAI.Llm;
+using AeroAI.Models;
 
 namespace AeroAI.Examples;
 
@@ -70,10 +71,27 @@ public static class DemoClearance
 					AllowLandingClearance = false
 				}
 			};
+			FlightContext flightContext = new FlightContext
+			{
+				Callsign = "CJ",
+				RadioCallsign = "CJ",
+				OriginIcao = "EGCC",
+				OriginName = "Manchester",
+				DestinationIcao = "GMMN",
+				DestinationName = "Casablanca",
+				CruiseFlightLevel = 350,
+				ClearedAltitude = 5000,
+				SquawkCode = "4672",
+				DepartureRunway = new NavRunwaySummary
+				{
+					AirportIcao = "EGCC",
+					RunwayIdentifier = "23R"
+				}
+			};
 			string pilotTransmission = "Good evening Clearance, this is CJ at stand 45 requesting IFR clearance to Casablanca as filed";
 			Console.WriteLine("PILOT → " + pilotTransmission + "\n");
 			Console.WriteLine("Generating ATC response...\n");
-			Console.WriteLine("ATC → " + await phraseEngine.GenerateAtcTransmissionAsync(context, pilotTransmission) + "\n");
+			Console.WriteLine("ATC → " + await phraseEngine.GenerateAtcTransmissionAsync(context, pilotTransmission, flightContext) + "\n");
 			Console.WriteLine("--- Context JSON (for debugging) ---");
 			Console.WriteLine(context.ToJson());
 		}

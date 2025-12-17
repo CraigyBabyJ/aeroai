@@ -22,13 +22,27 @@ public class FlightContext
 
 	public string OriginIcao { get; set; } = string.Empty;
 
+	public string OriginName { get; set; } = string.Empty;
+
 	public string DestinationIcao { get; set; } = string.Empty;
+
+	public string DestinationName { get; set; } = string.Empty;
 
 	public EnrouteRoute? EnrouteRoute { get; set; }
 
 	public WeatherInfo? OriginWeather { get; set; } = null;
 
 	public WeatherInfo? DestinationWeather { get; set; } = null;
+
+	/// <summary>
+	/// Last known ATIS information letter for departure (best-effort, from pilot transmissions).
+	/// </summary>
+	public string? DepartureAtisLetter { get; set; }
+
+	/// <summary>
+	/// Stand or gate number/identifier (e.g., "15", "A12", "B3").
+	/// </summary>
+	public string? Stand { get; set; }
 
 	public AircraftPerformanceProfile? Aircraft { get; set; } = null;
 
@@ -95,6 +109,11 @@ public class FlightContext
 
 	public string? CurrentFrequency { get; set; }
 
+	/// <summary>
+	/// True when no ATC is available and the pilot should use UNICOM.
+	/// </summary>
+	public bool NoAtcAvailable { get; set; }
+
 	public DepartureVectoringState? DepartureVectors { get; set; }
 
 	public ArrivalVectoringState? ArrivalVectors { get; set; }
@@ -112,6 +131,10 @@ public class FlightContext
 		AirlineFullName = string.Empty;
 		CanonicalCallsign = string.Empty;
 		RadioCallsign = string.Empty;
+		OriginName = string.Empty;
+		DestinationName = string.Empty;
+		DepartureAtisLetter = null;
+		Stand = null;
 		CurrentPhase = FlightPhase.Preflight_Clearance;
 		CurrentAtcState = AtcState.Idle;
 		CurrentAtcUnit = AtcUnit.ClearanceDelivery;

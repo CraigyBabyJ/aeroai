@@ -4,9 +4,24 @@
         Title="AeroAI" Height="700" Width="1000"
         Background="{StaticResource BackgroundDarkBrush}"
         WindowStyle="None" AllowsTransparency="True"
-        ResizeMode="CanResizeWithGrip">
+        ResizeMode="CanResizeWithGrip"
+        Icon="{DynamicResource WindowIconImage}">
     
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <DrawingImage x:Key="WindowIconImage">
+            <DrawingImage.Drawing>
+                <GeometryDrawing Brush="{StaticResource AccentCyanBrush}">
+                    <GeometryDrawing.Geometry>
+                        <!-- Simple paper-plane glyph -->
+                        <Geometry>
+                            M2,8 L12,6 L6,10 L8,14 L10,10 L14,8 L8,4 z
+                        </Geometry>
+                    </GeometryDrawing.Geometry>
+                </GeometryDrawing>
+            </DrawingImage.Drawing>
+        </DrawingImage>
+
         <!-- Button Style -->
         <Style x:Key="NavButton" TargetType="Button">
             <Setter Property="Background" Value="{StaticResource BackgroundLightBrush}"/>
@@ -14,13 +29,100 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="20,10"/>
             <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}" 
+                        <Border x:Name="root" Background="{TemplateBinding Background}" 
                                 CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#2f4d74"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#1f314b"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="root" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PrimaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
+            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
+            <Setter Property="Foreground" Value="Black"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" 
+                                CornerRadius="6" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#7af0c0"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#4bc08f"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="root" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WindowButtonBase" TargetType="Button">
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="4">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#24344d"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#1b2637"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="WindowButtonClose" TargetType="Button" BasedOn="{StaticResource WindowButtonBase}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#b3261e"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="root" Property="Background" Value="#8a1c17"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -30,6 +132,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>  <!-- Title bar -->
+            <RowDefinition Height="48"/>  <!-- Tabs -->
             <RowDefinition Height="60"/>  <!-- COM/XPDR bar -->
             <RowDefinition Height="Auto"/> <!-- Airport info -->
             <RowDefinition Height="*"/>    <!-- Messages -->
@@ -42,44 +145,133 @@
                 MouseDown="TitleBar_MouseDown">
             <Grid>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
-                    <Ellipse Width="40" Height="40" Fill="{StaticResource AccentGreenBrush}" Margin="0,0,10,0"/>
+                    <Border Width="40" Height="40" CornerRadius="10" Background="#24344d" Margin="0,0,10,0">
+                        <Viewbox Stretch="Uniform">
+                            <Path Fill="{StaticResource AccentCyanBrush}" Data="M2,8 L12,6 L6,10 L8,14 L10,10 L14,8 L8,4 z"/>
+                        </Viewbox>
+                    </Border>
                     <TextBlock Text="AeroAI" FontSize="18" FontWeight="Bold" 
                                Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
                     <TextBlock Text="v1.0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" 
                                VerticalAlignment="Center" Margin="10,0,0,0"/>
+
+                    <Border Background="#24344d" CornerRadius="12" Padding="10,4" Margin="14,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource AccentGreenBrush}" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="StationBadgeText" Text="Delivery" Foreground="{StaticResource TextPrimaryBrush}" FontSize="12" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
                 
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0">
-                    <TextBlock Text="Flight-ID:" Foreground="{StaticResource TextSecondaryBrush}" 
-                               VerticalAlignment="Center" Margin="0,0,5,0"/>
-                    <TextBlock x:Name="FlightIdText" Text="---" 
-                               Foreground="{StaticResource AccentCyanBrush}" 
-                               VerticalAlignment="Center" FontWeight="Bold"/>
-                    
-                    <Button Content="−" Width="30" Height="30" Margin="20,0,5,0" 
-                            Style="{StaticResource NavButton}" Click="Minimize_Click"/>
-                    <Button Content="×" Width="30" Height="30" 
-                            Style="{StaticResource NavButton}" Click="Close_Click"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,10,0" VerticalAlignment="Center">
+                    <Button Content="&#xE921;" Margin="10,0,5,0" 
+                            Style="{StaticResource WindowButtonBase}" Click="Minimize_Click"/>
+                    <Button x:Name="MaxRestoreButton" Content="&#xE922;" Margin="0,0,5,0"
+                            Style="{StaticResource WindowButtonBase}" Click="MaxRestore_Click"/>
+                    <Button Content="&#xE8BB;" 
+                            Style="{StaticResource WindowButtonClose}" Click="Close_Click"/>
                 </StackPanel>
             </Grid>
         </Border>
+
+        <!-- Top Tabs -->
+        <Border Grid.Row="1" Background="{StaticResource BackgroundMediumBrush}" Padding="16,6">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
+                <Button x:Name="TabAtcButton" Content="ATC" Padding="18,10" Margin="0,0,8,0" Click="TabAtcButton_Click">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource NavButton}">
+                            <Setter Property="Background" Value="#1f2b40"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="root" CornerRadius="12" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="root" Property="Background" Value="#2c3d5c"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="root" Property="Background" Value="#192233"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button x:Name="TabSettingsButton" Content="Settings" Padding="18,10" Margin="0,0,8,0" Click="TabSettingsButton_Click">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource NavButton}">
+                            <Setter Property="Background" Value="#1f2b40"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="root" CornerRadius="12" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="root" Property="Background" Value="#2c3d5c"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="root" Property="Background" Value="#192233"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+        </Border>
         
         <!-- COM/XPDR Bar -->
-        <Border Grid.Row="1" Background="{StaticResource BackgroundMediumBrush}" Margin="0,2,0,0">
+        <Border x:Name="ComBar" Grid.Row="2" Background="{StaticResource BackgroundMediumBrush}" Margin="0,2,0,0">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="15,0">
                 <Border Background="#2a2a4a" CornerRadius="4" Padding="15,8" Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="COM1" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="Com1Freq" Text="121.705" FontSize="16" FontWeight="Bold"
-                                   Foreground="{StaticResource AccentGreenBrush}"/>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="COM1" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="Com1Freq" Text="---" FontSize="16" FontWeight="Bold"
+                                       Foreground="{StaticResource AccentGreenBrush}"/>
+                        </StackPanel>
+                        <!-- TX/RX Indicators -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                <TextBlock Text="TX" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <Border x:Name="Com1TxLight" Width="12" Height="12" Background="#333333" BorderBrush="#555555" BorderThickness="1"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="RX" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <Border x:Name="Com1RxLight" Width="12" Height="12" Background="#333333" BorderBrush="#555555" BorderThickness="1"/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 
                 <Border Background="#2a2a4a" CornerRadius="4" Padding="15,8" Margin="0,0,15,0">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="COM2" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="Com2Freq" Text="OFF" FontSize="16" 
-                                   Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="COM2" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
+                            <TextBlock x:Name="Com2Freq" Text="OFF" FontSize="16" 
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                        <!-- TX/RX Indicators -->
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                <TextBlock Text="TX" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <Border x:Name="Com2TxLight" Width="12" Height="12" Background="#333333" BorderBrush="#555555" BorderThickness="1"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="RX" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,4,0" VerticalAlignment="Center"/>
+                                <Border x:Name="Com2RxLight" Width="12" Height="12" Background="#333333" BorderBrush="#555555" BorderThickness="1"/>
+                            </StackPanel>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
                 
@@ -94,7 +286,7 @@
         </Border>
         
         <!-- Airport Info Panel -->
-        <Border Grid.Row="2" Background="{StaticResource BackgroundMediumBrush}" Margin="10" 
+        <Border x:Name="AirportInfoPanel" Grid.Row="3" Background="{StaticResource BackgroundMediumBrush}" Margin="10" 
                 CornerRadius="8" Padding="15">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -126,14 +318,14 @@
                         </Grid.RowDefinitions>
                         
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="CLR" Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ClrFreq" Text="121.705" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ClrFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="GND" Foreground="{StaticResource TextSecondaryBrush}" Margin="20,0,0,0"/>
-                        <TextBlock Grid.Row="0" Grid.Column="3" x:Name="GndFreq" Text="121.705" Foreground="{StaticResource AccentGreenBrush}" FontWeight="Bold"/>
+                        <TextBlock Grid.Row="0" Grid.Column="3" x:Name="GndFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Bold"/>
                         
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="TWR" Foreground="{StaticResource TextSecondaryBrush}"/>
-                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TwrFreq" Text="118.63" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" x:Name="TwrFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
                         <TextBlock Grid.Row="1" Grid.Column="2" Text="DEP" Foreground="{StaticResource TextSecondaryBrush}" Margin="20,0,0,0"/>
-                        <TextBlock Grid.Row="1" Grid.Column="3" x:Name="DepFreq" Text="118.58" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="3" x:Name="DepFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
                     </Grid>
                 </StackPanel>
                 
@@ -147,6 +339,28 @@
                         <TextBlock Text="Dest" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
                         <TextBlock x:Name="DestIcao" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
                     </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="ATIS" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
+                        <TextBlock x:Name="AtisLetterDisplay" Text="---" Foreground="{StaticResource AccentYellowBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="METAR" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
+                        <TextBlock x:Name="MetarDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MaxWidth="360"
+                                   ToolTip="{Binding ElementName=MetarDisplay, Path=Text}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="RWY (adv)" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
+                        <TextBlock x:Name="AdvisoryRunwayDisplay" Text="---" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="Runway" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
+                        <TextBlock x:Name="DepRunwayDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                        <TextBlock Text="Init Alt" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
+                        <TextBlock x:Name="InitAltDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Squawk" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
                         <TextBlock x:Name="SquawkDisplay" Text="----" Foreground="{StaticResource AccentYellowBrush}"/>
@@ -155,62 +369,104 @@
                 
                 <!-- Right: Callsign -->
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
-                    <TextBlock x:Name="Callsign" Text="N123AZ" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource TextPrimaryBrush}"/>
-                    <TextBlock x:Name="AircraftType" Text="[A319]" FontSize="12"
+                    <TextBlock Text="Callsign" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="Callsign" Text="---" FontSize="22" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,2,0,0"/>
+                    <TextBlock x:Name="AircraftType" Text="[---]" FontSize="12"
                                Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Right"/>
                 </StackPanel>
             </Grid>
         </Border>
         
         <!-- Message History -->
-        <Border Grid.Row="3" Margin="10,0" CornerRadius="8" Background="{StaticResource BackgroundMediumBrush}">
-            <ScrollViewer x:Name="MessageScroller" VerticalScrollBarVisibility="Auto">
-                <ItemsControl x:Name="MessageList">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Border Margin="5" Padding="10" CornerRadius="4"
-                                    Background="{Binding Background}">
-                                <Border.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Copy message" Click="CopyMessage_Click"
-                                                  CommandParameter="{Binding}"/>
-                                    </ContextMenu>
-                                </Border.ContextMenu>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="200"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Station}" 
-                                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                                    <TextBox Grid.Column="1" Text="{Binding Message}" 
-                                             Foreground="{Binding MessageColor}"
-                                             Background="Transparent"
-                                             BorderThickness="0"
-                                             IsReadOnly="True"
-                                             TextWrapping="Wrap"
-                                             Padding="0"
-                                             AcceptsReturn="True"/>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+        <Border x:Name="MessagesPanel" Grid.Row="4" Margin="10,0" CornerRadius="8" Background="{StaticResource BackgroundMediumBrush}">
+            <Grid>
+                <TextBlock Text="ATC messages will appear here"
+                           Opacity="0.08"
+                           FontSize="32"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource TextPrimaryBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasItems, ElementName=MessageList}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <ScrollViewer x:Name="MessageScroller" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="MessageList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="6" Padding="10" CornerRadius="6"
+                                        Background="{Binding Background}">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Copy message" Click="CopyMessage_Click"
+                                                      CommandParameter="{Binding}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="6"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Background="{Binding MessageColor}" Opacity="0.4" CornerRadius="3"/>
+                                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                            <TextBlock Text="{Binding Station}" 
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       FontSize="12" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Message}" 
+                                                       Foreground="{Binding MessageColor}"
+                                                       Background="Transparent"
+                                                       TextWrapping="Wrap"
+                                                       Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
         </Border>
         
         <!-- Input Bar -->
-        <Border Grid.Row="4" Margin="10,10,10,0">
+        <Border x:Name="InputBar" Grid.Row="5" Margin="10,10,10,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="50"/>
+                    <ColumnDefinition Width="160"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 
-                <Ellipse Grid.Column="0" Width="40" Height="40" Fill="{StaticResource AccentGreenBrush}" 
-                         Opacity="0.3"/>
+                <!-- PTT Button with VHF-style mic level bar -->
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <Button x:Name="PttButton" Content="Hold to talk" Style="{StaticResource NavButton}" 
+                            Padding="16,8"
+                            PreviewMouseLeftButtonDown="PttButton_PreviewMouseLeftButtonDown"
+                            PreviewMouseLeftButtonUp="PttButton_PreviewMouseLeftButtonUp"
+                            LostMouseCapture="PttButton_LostMouseCapture"/>
+                    <!-- VHF-style microphone level bar -->
+                    <Border Background="#1a1f33" CornerRadius="3" Height="8" Margin="4,4,4,0">
+                        <Grid>
+                            <!-- Background segments for VHF look -->
+                            <Border Background="#2a2a4a" CornerRadius="2" Margin="1"/>
+                            <!-- Active level bar -->
+                            <Border x:Name="MicLevelBar" Background="{StaticResource AccentGreenBrush}" 
+                                    CornerRadius="2" Margin="1" HorizontalAlignment="Left" Width="0">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#5af0a0" BlurRadius="6" ShadowDepth="0" Opacity="0.6"/>
+                                </Border.Effect>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </StackPanel>
                 
                 <TextBox Grid.Column="1" x:Name="PilotInput" 
                          Background="#2a2a4a" Foreground="{StaticResource TextPrimaryBrush}"
@@ -218,28 +474,34 @@
                          VerticalContentAlignment="Center"
                          KeyDown="PilotInput_KeyDown"/>
                 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0">
-                    <Button Content="COM" Style="{StaticResource NavButton}" Margin="0,0,5,0"/>
-                    <Button Content="ATC" Style="{StaticResource NavButton}" 
-                            Background="{StaticResource AccentGreenBrush}" Foreground="Black"/>
-                </StackPanel>
+                <!-- Processing spinner (shown during STT/LLM processing) -->
+                <Border Grid.Column="3" x:Name="PttStateBadge" Background="#23334d" CornerRadius="8" Padding="10,6" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ProgressBar x:Name="PttSpinner" Width="60" Height="6"
+                                     Visibility="Collapsed" IsIndeterminate="True"
+                                     Foreground="{StaticResource AccentCyanBrush}" Background="#1a1f33"/>
+                    </StackPanel>
+                </Border>
             </Grid>
         </Border>
         
         <!-- Bottom Buttons -->
-        <Border Grid.Row="5" Margin="10,5,10,10">
+        <Border x:Name="BottomButtonsBar" Grid.Row="6" Margin="10,5,10,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <Button Content="New Flight" Style="{StaticResource NavButton}" Margin="0,0,10,0"
+                <Button Content="New Flight" Style="{StaticResource PrimaryNavButton}" Margin="0,0,10,0"
                         Click="NewFlight_Click"/>
-                <Button Content="Settings" Style="{StaticResource NavButton}" Margin="0,0,10,0"/>
-                <Button Content="SimBrief" Style="{StaticResource NavButton}" Margin="0,0,10,0"
-                        Click="SimBrief_Click"/>
-                <Button Content="Import Flight Plan" Style="{StaticResource NavButton}" Margin="0,0,10,0"
+                <Button Content="Import Flight Plan" Style="{StaticResource PrimaryNavButton}" Margin="0,0,10,0"
                         Click="ImportFlightPlan_Click"/>
                 <Button Content="Copy last ATC" Style="{StaticResource NavButton}" Margin="0,0,10,0"
                         Click="CopyLastAtc_Click"/>
-                <Button Content="About" Style="{StaticResource NavButton}"/>
+                <CheckBox x:Name="DebugToggle" Content="Debug" VerticalAlignment="Center"
+                          Foreground="{StaticResource TextPrimaryBrush}"
+                          Checked="DebugToggle_Checked" Unchecked="DebugToggle_Unchecked"/>
             </StackPanel>
         </Border>
+
+        <!-- Settings Panel -->
+        <ContentControl x:Name="SettingsHost" Grid.Row="2" Grid.RowSpan="4" Margin="10" Visibility="Collapsed"/>
     </Grid>
 </Window>
+

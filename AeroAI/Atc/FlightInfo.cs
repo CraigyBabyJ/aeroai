@@ -22,6 +22,12 @@ public sealed class FlightInfo
 	[JsonPropertyName("arr_name")]
 	public string? ArrName { get; set; }
 
+	[JsonPropertyName("dep_airport_name")]
+	public string? DepAirportName { get; set; }
+
+	[JsonPropertyName("arr_airport_name")]
+	public string? ArrAirportName { get; set; }
+
 	[JsonPropertyName("cruise_level")]
 	public string? CruiseLevel { get; set; }
 

@@ -19,17 +19,18 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
 
-  <!-- Include source files from parent project (excluding Program.cs) -->
+  <!-- Include source files from parent project (excluding Program.cs and test files) -->
   <ItemGroup>
-    <Compile Include="..\AeroAI\**\*.cs" LinkBase="AeroAI" />
+    <Compile Include="..\AeroAI\**\*.cs" LinkBase="AeroAI" Exclude="..\AeroAI\**\*Tests.cs" />
     <Compile Include="..\Config\*.cs" LinkBase="Config" />
     <Compile Include="..\Data\*.cs" LinkBase="Data" Exclude="..\Data\*.py" />
     <Compile Include="..\Models\*.cs" LinkBase="Models" />
     <Compile Include="..\SimBrief\*.cs" LinkBase="SimBrief" />
     <Compile Include="..\Weather\*.cs" LinkBase="Weather" />
-    <Compile Include="..\Atc\*.cs" LinkBase="Atc" />
+    <Compile Include="..\Atc\*.cs" LinkBase="Atc" Exclude="..\Atc\*Tests.cs" />
     <Compile Include="..\Audio\*.cs" LinkBase="Audio" />
     <Compile Remove="..\Program.cs" />
   </ItemGroup>
@@ -39,11 +40,13 @@
     <None Include="..\Data\airport-frequencies.json" Link="Data\airport-frequencies.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Data\airlines.json" Link="Data\airlines.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Config\audio-effects.json" Link="Config\audio-effects.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Config\stt_corrections.json" Link="Config\stt_corrections.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Data\aircraft_type.json" Link="Data\aircraft_type.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\voices\*.json" LinkBase="voices" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Assets\Audio\**\*.mp3" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Assets\Audio\**\*.wav" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\prompts\*.txt" LinkBase="prompts" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\whisper-fast\service.py" Link="whisper-fast\service.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

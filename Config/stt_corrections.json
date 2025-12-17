@@ -1,0 +1,306 @@
+{
+  "enabled": true,
+  "rules": [
+    {
+      "name": "Ground misheard as Graham",
+      "type": "regex",
+      "pattern": "\\bgraham\\b",
+      "replacement": "ground",
+      "ignoreCase": true
+    },
+    {
+      "name": "Radio check misheard as radio chat",
+      "type": "regex",
+      "pattern": "\\bradio\\s+chat\\b",
+      "replacement": "radio check",
+      "ignoreCase": true
+    },
+    {
+      "name": "Stansted misheard as sunset",
+      "type": "regex",
+      "pattern": "\\bsunset\\b",
+      "replacement": "stansted",
+      "ignoreCase": true
+    },
+    {
+      "name": "Ryanair misheard as ryan air (split)",
+      "type": "regex",
+      "pattern": "\\bryan\\s+air\\b",
+      "replacement": "ryanair",
+      "ignoreCase": true
+    },
+    {
+      "name": "Ryanair misheard as byan air",
+      "type": "regex",
+      "pattern": "\\bbyan\\s+air\\b",
+      "replacement": "ryanair",
+      "ignoreCase": true
+    },
+    {
+      "name": "Ryanair misheard as brian air",
+      "type": "regex",
+      "pattern": "\\bbrian\\s+air\\b",
+      "replacement": "ryanair",
+      "ignoreCase": true
+    },
+    {
+      "name": "Ryanair misheard as rian air",
+      "type": "regex",
+      "pattern": "\\brian\\s+air\\b",
+      "replacement": "ryanair",
+      "ignoreCase": true
+    },
+    {
+      "name": "Juneau misheard as juvenile",
+      "type": "regex",
+      "pattern": "\\bjuvenile\\b",
+      "replacement": "juneau",
+      "ignoreCase": true
+    },
+    {
+      "name": "June International misheard for Juneau International",
+      "type": "regex",
+      "pattern": "\\bjune\\s+international\\b",
+      "replacement": "juneau international",
+      "ignoreCase": true
+    },
+    {
+      "name": "As filed variants",
+      "type": "regex",
+      "pattern": "\\bas\\s+filed\\b",
+      "replacement": "as filed",
+      "ignoreCase": true
+    },
+    {
+      "name": "Hold point variants",
+      "type": "regex",
+      "pattern": "\\bhold\\s+point\\b",
+      "replacement": "holding point",
+      "ignoreCase": true
+    },
+    {
+      "name": "IFR misheard as ivar",
+      "type": "regex",
+      "pattern": "\\bivar\\b",
+      "replacement": "ifr",
+      "ignoreCase": true
+    },
+    {
+      "name": "Push and start variants",
+      "type": "regex",
+      "pattern": "\\bpush\\s+&\\s+start\\b",
+      "replacement": "push and start",
+      "ignoreCase": true
+    },
+    {
+      "name": "Radio check misheard as radio cheque",
+      "type": "regex",
+      "pattern": "\\bradio\\s+cheque\\b",
+      "replacement": "radio check",
+      "ignoreCase": true
+    },
+    {
+      "name": "Radio check misheard as radio shack",
+      "type": "regex",
+      "pattern": "\\bradio\\s+shack\\b",
+      "replacement": "radio check",
+      "ignoreCase": true
+    },
+    {
+      "name": "Squawk spelled squak",
+      "type": "regex",
+      "pattern": "\\bsquak\\b",
+      "replacement": "squawk",
+      "ignoreCase": true
+    },
+    {
+      "name": "Squawk spelled squack",
+      "type": "regex",
+      "pattern": "\\bsquack\\b",
+      "replacement": "squawk",
+      "ignoreCase": true
+    },
+    {
+      "name": "Squawk spelled squok",
+      "type": "regex",
+      "pattern": "\\bsquok\\b",
+      "replacement": "squawk",
+      "ignoreCase": true
+    },
+    {
+      "name": "Squawk ident spelled squak ident",
+      "type": "regex",
+      "pattern": "\\bsquak\\s+ident\\b",
+      "replacement": "squawk ident",
+      "ignoreCase": true
+    },
+    {
+      "name": "Departure spelled depature",
+      "type": "regex",
+      "pattern": "\\bdepature\\b",
+      "replacement": "departure",
+      "ignoreCase": true
+    },
+    {
+      "name": "Departure spelled departcher",
+      "type": "regex",
+      "pattern": "\\bdepartcher\\b",
+      "replacement": "departure",
+      "ignoreCase": true
+    },
+    {
+      "name": "Approach spelled approch",
+      "type": "regex",
+      "pattern": "\\bapproch\\b",
+      "replacement": "approach",
+      "ignoreCase": true
+    },
+    {
+      "name": "Approach spelled appraoch",
+      "type": "regex",
+      "pattern": "\\bappraoch\\b",
+      "replacement": "approach",
+      "ignoreCase": true
+    },
+    {
+      "name": "Approach spelled appoach",
+      "type": "regex",
+      "pattern": "\\bappoach\\b",
+      "replacement": "approach",
+      "ignoreCase": true
+    },
+    {
+      "name": "Clearance spelled clearence",
+      "type": "regex",
+      "pattern": "\\bclearence\\b",
+      "replacement": "clearance",
+      "ignoreCase": true
+    },
+    {
+      "name": "Maintain spelled maintane",
+      "type": "regex",
+      "pattern": "\\bmaintane\\b",
+      "replacement": "maintain",
+      "ignoreCase": true
+    },
+    {
+      "name": "Maintain spelled maintaine",
+      "type": "regex",
+      "pattern": "\\bmaintaine\\b",
+      "replacement": "maintain",
+      "ignoreCase": true
+    },
+    {
+      "name": "Maintain spelled mintain",
+      "type": "regex",
+      "pattern": "\\bmintain\\b",
+      "replacement": "maintain",
+      "ignoreCase": true
+    },
+    {
+      "name": "Climb and mintain",
+      "type": "regex",
+      "pattern": "\\bclimb\\s+and\\s+mintain\\b",
+      "replacement": "climb and maintain",
+      "ignoreCase": true
+    },
+    {
+      "name": "Descend and mintain",
+      "type": "regex",
+      "pattern": "\\bdescend\\s+and\\s+mintain\\b",
+      "replacement": "descend and maintain",
+      "ignoreCase": true
+    },
+    {
+      "name": "Line up and weight",
+      "type": "regex",
+      "pattern": "\\bline\\s+up\\s+and\\s+weight\\b",
+      "replacement": "line up and wait",
+      "ignoreCase": true
+    },
+    {
+      "name": "Line up on weight",
+      "type": "regex",
+      "pattern": "\\bline\\s+up\\s+on\\s+weight\\b",
+      "replacement": "line up and wait",
+      "ignoreCase": true
+    },
+    {
+      "name": "Hold shore",
+      "type": "regex",
+      "pattern": "\\bhold\\s+shore\\b",
+      "replacement": "hold short",
+      "ignoreCase": true
+    },
+    {
+      "name": "Holding shore",
+      "type": "regex",
+      "pattern": "\\bholding\\s+shore\\b",
+      "replacement": "holding short",
+      "ignoreCase": true
+    },
+    {
+      "name": "Holding shot",
+      "type": "regex",
+      "pattern": "\\bholding\\s+shot\\b",
+      "replacement": "holding short",
+      "ignoreCase": true
+    },
+    {
+      "name": "Flight level missing t",
+      "type": "regex",
+      "pattern": "\\bfligh\\s+level\\b",
+      "replacement": "flight level",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as az",
+      "type": "regex",
+      "pattern": "\\baz\\s+(\\d+)\\b",
+      "replacement": "Easy $1",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as ex",
+      "type": "regex",
+      "pattern": "\\bex\\s+(\\d+)\\b",
+      "replacement": "Easy $1",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as ax",
+      "type": "regex",
+      "pattern": "\\bax\\s+(\\d+)\\b",
+      "replacement": "Easy $1",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as az with phonetic numbers",
+      "type": "regex",
+      "pattern": "\\baz\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\b",
+      "replacement": "Easy $1 $2 $3",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as ex with phonetic numbers",
+      "type": "regex",
+      "pattern": "\\bex\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\b",
+      "replacement": "Easy $1 $2 $3",
+      "ignoreCase": true
+    },
+    {
+      "name": "Easy misheard as ax with phonetic numbers",
+      "type": "regex",
+      "pattern": "\\bax\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\s+(one|two|three|four|five|six|seven|eight|nine|zero|oh|wun|too|tree|fower|fife|six|seven|ate|niner|zero|o)\\b",
+      "replacement": "Easy $1 $2 $3",
+      "ignoreCase": true
+    },
+    {
+      "name": "AFR misheard as IFR",
+      "type": "regex",
+      "pattern": "\\bAFR\\b",
+      "replacement": "IFR",
+      "ignoreCase": true
+    }
+  ]
+}

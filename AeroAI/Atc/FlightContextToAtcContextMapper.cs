@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using AeroAI.Models;
 using AeroAI.Data;
+using AeroAI.Config;
 
 namespace AeroAI.Atc;
 
 public static class FlightContextToAtcContextMapper
 {
-	public static AtcContext Map(FlightContext flightContext, bool ifrClearanceIssued = false, PilotIntent? pilotIntent = null)
+	public static AtcContext Map(FlightContext flightContext, bool ifrClearanceIssued = false, PilotIntent? pilotIntent = null, bool hideDestination = false)
 	{
 		string controllerRole = flightContext.CurrentAtcUnit switch
 		{
@@ -36,20 +37,18 @@ public static class FlightContextToAtcContextMapper
 		};
 
 		// Critical clearance fields
-		string clearedTo = !string.IsNullOrWhiteSpace(flightContext.DestinationIcao)
-			? GetAirportName(flightContext.DestinationIcao)
-			: flightContext.DestinationIcao;
+		string depAirportName = AirportNameResolver.ResolveAirportName(flightContext.OriginIcao, flightContext);
+		string arrAirportName = hideDestination
+			? string.Empty
+			: AirportNameResolver.ResolveAirportName(flightContext.DestinationIcao, flightContext);
+
+		string? clearedTo = hideDestination ? null : arrAirportName;
 
 		string? depRunway = StripRunwayPrefix(flightContext.SelectedDepartureRunway ?? flightContext.DepartureRunway?.RunwayIdentifier);
 		int initialAltitude = flightContext.ClearedAltitude ?? GetDefaultInitialAltitude(flightContext);
 		string routeSummary = GetRouteSummary(flightContext);
 
 		string? squawk = flightContext.SquawkCode;
-		if (string.IsNullOrWhiteSpace(squawk))
-		{
-			squawk = GenerateSquawk();
-			flightContext.SquawkCode = squawk;
-		}
 
 		bool dataReady = !string.IsNullOrWhiteSpace(clearedTo)
 			&& !string.IsNullOrWhiteSpace(depRunway)
@@ -60,6 +59,20 @@ public static class FlightContextToAtcContextMapper
 		string clearanceType = flightContext.CurrentPhase == FlightPhase.Preflight_Clearance && dataReady && !clearanceAlreadyIssued
 			? "IFR_CLEARANCE"
 			: "INFORMATION_ONLY";
+
+		// If no departure runway was selected yet, and we're in preflight clearance, keep runway null
+		// so the LLM will prompt for it instead of assuming/announcing one.
+		if (flightContext.CurrentPhase == FlightPhase.Preflight_Clearance && flightContext.DepartureRunway == null)
+		{
+			depRunway = null;
+			dataReady = !string.IsNullOrWhiteSpace(clearedTo)
+				&& initialAltitude > 0
+				&& !string.IsNullOrWhiteSpace(squawk);
+			if (clearanceType == "IFR_CLEARANCE" && !dataReady)
+			{
+				clearanceType = "INFORMATION_ONLY";
+			}
+		}
 
 		string callsign = !string.IsNullOrWhiteSpace(flightContext.Callsign)
 			? flightContext.Callsign
@@ -74,9 +87,11 @@ public static class FlightContextToAtcContextMapper
 			Callsign = callsign,
 			AircraftType = flightContext.Aircraft?.IcaoType ?? "B738",
 			DepIcao = flightContext.OriginIcao,
-			DepName = GetAirportName(flightContext.OriginIcao),
+			DepName = depAirportName,
+			DepAirportName = depAirportName,
 			ArrIcao = flightContext.DestinationIcao,
-			ArrName = GetAirportName(flightContext.DestinationIcao),
+			ArrName = arrAirportName,
+			ArrAirportName = arrAirportName,
 			CruiseLevel = $"FL{flightContext.CruiseFlightLevel}",
 			AlternateIcao = null
 		};
@@ -132,6 +147,12 @@ public static class FlightContextToAtcContextMapper
 			AllowLandingClearance = false
 		};
 
+		// Get current ATIS letter from cache (actual current letter, not just what pilot said).
+		var currentAtis = AtisMetarCache.Get(flightContext.OriginIcao);
+		var atisLetter = !string.IsNullOrWhiteSpace(currentAtis.AtisLetter)
+			? currentAtis.AtisLetter
+			: flightContext.DepartureAtisLetter;
+
 		AtcContext ctx = new AtcContext
 		{
 			ControllerRole = controllerRole,
@@ -141,7 +162,8 @@ public static class FlightContextToAtcContextMapper
 			WeatherRelevant = weatherRelevant,
 			StateFlags = stateFlags,
 			Permissions = permissions,
-			CallsignInfo = callsignInfo
+			CallsignInfo = callsignInfo,
+			DepartureAtisLetter = atisLetter
 		};
 
 		if (AirportFrequencies.TryGetGroundFrequency(flightContext.OriginIcao, out double groundFreq))
@@ -152,19 +174,6 @@ public static class FlightContextToAtcContextMapper
 		// Apply phase defaults AFTER filling critical clearance fields.
 		PhaseDefaults.ApplyPhaseDefaults(flightContext.CurrentPhase, ctx);
 		return ctx;
-	}
-
-	private static string GetAirportName(string icao)
-	{
-		return icao switch
-		{
-			"GMMN" => "Casablanca",
-			"ELLX" => "Luxembourg",
-			"EDDM" => "Munich",
-			"LOWI" => "Innsbruck",
-			"EGCC" => "Manchester",
-			_ => icao
-		};
 	}
 
 	private static string GetRouteSummary(FlightContext context)
@@ -186,12 +195,6 @@ public static class FlightContextToAtcContextMapper
 	private static int GetDefaultInitialAltitude(FlightContext context)
 	{
 		return context.CruiseFlightLevel > 300 ? 5000 : 3000;
-	}
-
-	private static string GenerateSquawk()
-	{
-		var rng = new Random();
-		return $"{rng.Next(1, 8)}{rng.Next(0, 8)}{rng.Next(0, 8)}{rng.Next(0, 8)}";
 	}
 
 	/// <summary>

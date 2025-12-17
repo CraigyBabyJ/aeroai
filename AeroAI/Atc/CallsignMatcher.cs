@@ -35,6 +35,35 @@ public static class CallsignMatcher
 		return false;
 	}
 
+	/// <summary>
+	/// Extract callsign from pilot transmission if present.
+	/// </summary>
+	public static string? ExtractCallsign(string pilotTransmission, FlightContext context)
+	{
+		if (string.IsNullOrWhiteSpace(pilotTransmission))
+			return null;
+
+		var details = CallsignDetails.FromContext(context);
+		if (!details.IsValid)
+			return null;
+
+		var normalizedPilot = Normalize(pilotTransmission);
+		if (string.IsNullOrWhiteSpace(normalizedPilot))
+			return null;
+
+		// Try to find any variant in the transmission
+		foreach (var variant in BuildVariants(details))
+		{
+			var normalizedVariant = Normalize(variant);
+			if (!string.IsNullOrWhiteSpace(normalizedVariant) && normalizedPilot.Contains(normalizedVariant))
+			{
+				return details.CanonicalCallsign;
+			}
+		}
+
+		return null;
+	}
+
 	public static IReadOnlyList<string> BuildVariants(CallsignDetails details)
 	{
 		var variants = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -50,6 +79,26 @@ public static class CallsignMatcher
 			var canonical = details.AirlineIcao + details.FlightNumber;
 			AddIfAny(variants, canonical);
 			AddIfAny(variants, $"{details.AirlineIcao} {details.FlightNumber}");
+
+			// Tolerate occasional STT drops of the last letter in the airline ICAO (e.g., EZY -> EZ).
+			if (details.AirlineIcao.Length >= 3)
+			{
+				var shortIcao = details.AirlineIcao[..2];
+				AddIfAny(variants, shortIcao + details.FlightNumber);
+				AddIfAny(variants, $"{shortIcao} {details.FlightNumber}");
+			}
+
+			// Allow spelled-out digits with the short ICAO as well.
+			var spelledDigits = ToSpelledDigits(details.FlightNumber);
+			if (!string.IsNullOrWhiteSpace(spelledDigits))
+			{
+				AddIfAny(variants, $"{details.AirlineIcao} {spelledDigits}");
+				if (details.AirlineIcao.Length >= 3)
+				{
+					var shortIcao = details.AirlineIcao[..2];
+					AddIfAny(variants, $"{shortIcao} {spelledDigits}");
+				}
+			}
 		}
 
 		var baseNames = GetAirlineNameVariants(details);

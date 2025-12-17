@@ -32,6 +32,9 @@ public sealed class AtcContext
 	[JsonPropertyName("ground_frequency_mhz")]
 	public double? GroundFrequencyMhz { get; set; }
 
+	[JsonPropertyName("departure_atis_letter")]
+	public string? DepartureAtisLetter { get; set; }
+
 	public string ToJson()
 	{
 		JsonSerializerOptions options = new JsonSerializerOptions

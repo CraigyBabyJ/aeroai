@@ -13,21 +13,24 @@
 ### Quick how-to
 1) Run the app and watch the console for `=== ATC DEBUG PROMPT/RESPONSE ===` blocks. Set `AEROAI_LOG_FILE=logs/atc.log` if you want file logging.
 2) First pilot call (no prior clearance): model issues clearance; `_state` moves to `ClearanceIssued`.
-3) Second call (readback-style): context has `ifr_clearance_issued=true`; prompt readback block should return “readback correct” or corrections; may optionally add “contact ground when ready for push and start.”
+3) Second call (readback-style): context has `ifr_clearance_issued=true`; prompt readback block should return "readback correct" or corrections; may optionally add "contact ground when ready for push and start."
+4) Push-to-talk: hold the mic button in the input bar, speak, release to auto-transcribe via local `whisper-cli.exe` (uses model under `./whisper/models/`, override via env if needed).
 
 ### Key files
-- `prompts/aeroai_system_prompt.txt` — system prompt, now with readback rules.
-- `AeroAI/Llm/AeroAiPhraseEngine.cs` — logging around LLM calls.
-- `AeroAI/Atc/AeroAiLlmSession.cs` — state machine; readbacks now sent to LLM in `ClearanceIssued`.
-- `AeroAI/Atc/FlightContext.cs` and `AeroAI/Atc/AeroAiLlmSession.cs` — reset methods for a fresh flight/session.
-- `AeroAI/Atc/FlightContextToAtcContextMapper.cs` — injects ground frequency when available.
-- `Data/AirportFrequencies.cs` — JSON-backed ground frequency lookup; `AtcNavDataDemo.csproj` copies the JSON to output. Use `Data/convert_frequencies_to_json.py` to convert CSV to JSON.
-- `voices/` — voice profiles (`default`, `gibraltar_english`, `gibraltar_spanish`) with `region_codes` prefixes and `controller_types`; `VoiceProfileLoader`/`VoiceProfileManager` select profiles; `OpenAiAudioVoiceEngine` uses them.
+- `prompts/aeroai_system_prompt.txt` - system prompt, now with readback rules.
+- `AeroAI/Llm/AeroAiPhraseEngine.cs` - logging around LLM calls.
+- `AeroAI/Atc/AeroAiLlmSession.cs` - state machine; readbacks now sent to LLM in `ClearanceIssued`.
+- `AeroAI/Atc/FlightContext.cs` and `AeroAI/Atc/AeroAiLlmSession.cs` - reset methods for a fresh flight/session.
+- `AeroAI/Atc/FlightContextToAtcContextMapper.cs` - injects ground frequency when available.
+- `Data/AirportFrequencies.cs` - JSON-backed ground frequency lookup; `AtcNavDataDemo.csproj` copies the JSON to output. Use `Data/convert_frequencies_to_json.py` to convert CSV to JSON.
+- `voices/` - voice profiles (`default`, `gibraltar_english`, `gibraltar_spanish`) with `region_codes` prefixes and `controller_types`; `VoiceProfileLoader`/`VoiceProfileManager` select profiles; `OpenAiAudioVoiceEngine` uses them.
+- `AeroAI.UI/Services/WhisperSttService.cs` - push-to-talk mic capture + whisper-cli transcription (UI mic button in input bar, looks for whisper/whisper-cli.exe and whisper/models/ggml-medium.en-q5_0.bin).
 
 ### Env vars
-- `AEROAI_LOG_FILE` — optional path to append prompt/response logs.
-- `AEROAI_LOG_API` — if set to truthy, also triggers the older API logging block.
+- `AEROAI_LOG_FILE` - optional path to append prompt/response logs.
+- `AEROAI_LOG_API` - if set to truthy, also triggers the older API logging block.
 - TTS/voices: `AEROAI_TTS_ENABLED`, `OPENAI_API_KEY`, `AEROAI_TTS_MODEL`, `AEROAI_TTS_VOICE`, `AEROAI_TTS_SPEED`, `OPENAI_API_BASE`, `AEROAI_VOICE_PROFILE`, `AEROAI_VOICE_GIBRALTAR` (english/spanish).
+- Whisper STT (UI push-to-talk): place `whisper-cli.exe` in `whisper/` and `ggml-medium.en-q5_0.bin` in `whisper/models/`.
 -### Open issues / next steps
 - Verify runway selection runs before clearance call; if `dep_runway` is missing in the prompt, model still asks for it. Add a debug print before mapping to ensure the picker populated `SelectedDepartureRunway`.
 - Add a ground handoff after correct readback (prompt allows it when `ground_frequency_mhz` is present).

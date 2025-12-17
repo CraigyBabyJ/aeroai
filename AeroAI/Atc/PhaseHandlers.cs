@@ -27,14 +27,14 @@ public static class PhaseHandlers
 			{
 				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
 				context.Permissions.AllowIfrClearance = false;
-				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 			}
 
 			if (ready && !context.StateFlags.IfrClearanceIssued)
 			{
 				context.ClearanceDecision.ClearanceType = "IFR_CLEARANCE";
 				context.Permissions.AllowIfrClearance = true;
-				string atc = (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+				string atc = (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 				context.StateFlags.IfrClearanceIssued = true;
 				flightContext.CurrentAtcState = AtcState.ClearanceIssued;
 				return atc;
@@ -44,7 +44,7 @@ public static class PhaseHandlers
 			{
 				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
 				context.Permissions.AllowIfrClearance = false;
-				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 			}
 
 			return null;
@@ -62,7 +62,7 @@ public static class PhaseHandlers
 		{
 			context.ClearanceDecision.ClearanceType = "TAXI";
 			context.Permissions.AllowTaxi = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -87,7 +87,7 @@ public static class PhaseHandlers
 				context.ClearanceDecision.ClearanceType = "TAKEOFF";
 				context.Permissions.AllowTakeoffClearance = true;
 			}
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -102,7 +102,7 @@ public static class PhaseHandlers
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "CLIMB";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -117,7 +117,7 @@ public static class PhaseHandlers
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -132,7 +132,7 @@ public static class PhaseHandlers
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "DESCENT";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -148,7 +148,7 @@ public static class PhaseHandlers
 		{
 			context.ClearanceDecision.ClearanceType = "APPROACH";
 			context.Permissions.AllowApproachClearance = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -164,7 +164,7 @@ public static class PhaseHandlers
 		{
 			context.ClearanceDecision.ClearanceType = "LANDING";
 			context.Permissions.AllowLandingClearance = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{
@@ -180,7 +180,7 @@ public static class PhaseHandlers
 		{
 			context.ClearanceDecision.ClearanceType = "TAXI";
 			context.Permissions.AllowTaxi = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, ct)).Trim();
+			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
 		}
 		catch (Exception ex)
 		{

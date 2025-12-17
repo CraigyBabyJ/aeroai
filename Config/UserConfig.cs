@@ -9,6 +9,28 @@ namespace AtcNavDataDemo.Config;
 public sealed class UserConfig
 {
     public string SimBriefUsername { get; set; } = string.Empty;
+    public AudioConfig Audio { get; set; } = new();
+}
+
+public sealed class AudioConfig
+{
+    public string? MicrophoneDeviceId { get; set; }
+    public string? OutputDeviceId { get; set; }
+    
+    /// <summary>
+    /// Software mic gain in dB. Range: -12 to +12. Default: 0.
+    /// </summary>
+    public double MicGainDb { get; set; } = 0.0;
+    
+    /// <summary>
+    /// ATC audio output device ID. If null, uses system default.
+    /// </summary>
+    public string? AtcOutputDeviceId { get; set; }
+    
+    /// <summary>
+    /// ATC audio volume as percentage (0-100). Default: 100.
+    /// </summary>
+    public int AtcVolumePercent { get; set; } = 100;
 }
 
 public static class UserConfigStore
@@ -17,36 +39,42 @@ public static class UserConfigStore
 
     public static UserConfig Load()
     {
-        var candidates = BuildCandidatePaths();
-        var path = candidates.FirstOrDefault(File.Exists) ?? candidates.FirstOrDefault() ?? GetAppDataPath();
+        var path = GetPrimaryPath();
 
         try
         {
             if (!File.Exists(path))
-                return new UserConfig();
+            {
+                var defaults = new UserConfig();
+                Save(defaults);
+                return defaults;
+            }
 
             var json = File.ReadAllText(path);
             var config = JsonSerializer.Deserialize<UserConfig>(json);
-            return config ?? new UserConfig();
+            if (config == null)
+            {
+                var defaults = new UserConfig();
+                Save(defaults);
+                return defaults;
+            }
+            if (config.Audio == null)
+                config.Audio = new AudioConfig();
+            return config;
         }
         catch
         {
-            // On any error, fall back to defaults rather than crash.
-            return new UserConfig();
+            var defaults = new UserConfig();
+            Save(defaults);
+            return defaults;
         }
     }
 
     public static void Save(UserConfig config)
     {
         var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-        var candidates = BuildCandidatePaths();
-        var primaryPath = candidates.FirstOrDefault(File.Exists) ?? candidates.FirstOrDefault() ?? GetAppDataPath();
-
-        if (!TryWrite(primaryPath, json))
-        {
-            var fallback = GetAppDataPath();
-            TryWrite(fallback, json);
-        }
+        var primaryPath = GetPrimaryPath();
+        TryWrite(primaryPath, json);
     }
 
     private static bool TryWrite(string path, string json)
@@ -69,48 +97,9 @@ public static class UserConfigStore
         }
     }
 
-    private static List<string> BuildCandidatePaths()
+    private static string GetPrimaryPath()
     {
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var paths = new List<string>();
-
-        void AddChain(string? start)
-        {
-            if (string.IsNullOrWhiteSpace(start) || !Directory.Exists(start))
-                return;
-
-            try
-            {
-                var dir = new DirectoryInfo(start);
-                while (dir != null)
-                {
-                    var candidate = Path.Combine(dir.FullName, ConfigFileName);
-                    if (seen.Add(candidate))
-                        paths.Add(candidate);
-
-                    dir = dir.Parent;
-                }
-            }
-            catch
-            {
-                // ignore traversal issues
-            }
-        }
-
-        AddChain(Directory.GetCurrentDirectory());
-        AddChain(AppContext.BaseDirectory);
-
-        var appDataPath = GetAppDataPath();
-        if (seen.Add(appDataPath))
-            paths.Add(appDataPath);
-
-        return paths;
-    }
-
-    private static string GetAppDataPath()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var appDir = Path.Combine(appData, "AeroAI");
-        return Path.Combine(appDir, ConfigFileName);
+        var baseDir = AppContext.BaseDirectory;
+        return Path.Combine(baseDir, ConfigFileName);
     }
 }

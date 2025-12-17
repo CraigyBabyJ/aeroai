@@ -1,73 +1,46 @@
 # OpenAI Integration Setup
 
-AeroAI now supports OpenAI models (GPT-4o-mini, GPT-4, etc.) in addition to local Ollama models.
+AeroAI ships with an OpenAI client and phrase engine; `.env` is loaded via `EnvironmentConfig.Load()` at startup.
 
-## Quick Start
-
-1. **Create `.env` file** (copy from `.env.template`):
-   ```bash
-   cp .env.template .env
-   ```
-
-2. **Edit `.env`** and add your OpenAI API key:
-   ```
-   OPENAI_API_KEY=sk-your-key-here
-   OPENAI_MODEL=gpt-4o-mini
-   ```
-
-3. **Load environment variables** in your app:
+## Quick start
+1) Copy `.env.example` to `.env`.
+2) Set `OPENAI_API_KEY=...` and optionally `OPENAI_MODEL` (default is the fine-tuned id in `EnvironmentConfig`). `OPENAI_BASE_URL` is optional; the client always uses `https://api.openai.com/v1` to avoid 404s.
+3) Load env before constructing the client:
    ```csharp
-   var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
-       ?? throw new InvalidOperationException("OPENAI_API_KEY not set");
-   var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
+   EnvironmentConfig.Load();
    ```
-
-4. **Use OpenAI client**:
+4) Use the client/phrase engine:
    ```csharp
-   var llm = new OpenAiLlmClient(apiKey, model);
+   EnvironmentConfig.Load();
+   using var llm = new OpenAiLlmClient(EnvironmentConfig.GetOpenAiApiKey(), EnvironmentConfig.GetOpenAiModel());
    var session = new AeroAiLlmSession(llm, flightContext);
-   var atcResponse = await session.HandlePilotTransmissionAsync("...");
+   var reply = await session.HandlePilotTransmissionAsync("Requesting IFR clearance to Innsbruck.");
+   ```
+   or
+   ```csharp
+   EnvironmentConfig.Load();
+   var engine = new AeroAiPhraseEngine(
+       apiKey: EnvironmentConfig.GetOpenAiApiKey(),
+       model: EnvironmentConfig.GetOpenAiModel(),
+       systemPromptPath: EnvironmentConfig.GetSystemPromptPath());
+   var text = await engine.GenerateAtcTransmissionAsync(atcContext, pilotText, flightContext);
    ```
 
-## Files Created
+## Files that matter
+- `.env` – holds `OPENAI_API_KEY`, `OPENAI_MODEL`, and optional `AEROAI_SYSTEM_PROMPT_PATH` (defaults to `prompts/aeroai_finetuned_prompt.txt`).
+- `AeroAI/Llm/OpenAiLlmClient.cs` – chat/completions client; base URL is hardcoded to prevent double `/v1` errors.
+- `AeroAI/Llm/AeroAiPhraseEngine.cs` – builds prompts, logs debug blocks, and runs `AtcResponseValidator` against replies.
+- `prompts/aeroai_system_prompt.txt` and `prompts/aeroai_finetuned_prompt.txt` – system prompts (fine-tuned prompt is the default path).
 
-- **`.env.template`**: Template for environment variables (don't commit `.env` to Git)
-- **`prompts/aeroai_system_prompt.txt`**: System prompt for OpenAI
-- **`prompts/aeroai_user_prompt_template.txt`**: User prompt template (reference)
-- **`AeroAI/Llm/OpenAiLlmClient.cs`**: OpenAI API client implementation
-- **`AeroAI/Llm/OpenAiPromptTemplate.cs`**: Prompt builder for OpenAI format
-- **`AeroAI/Examples/OpenAiAtcDemo.cs`**: Example usage
-
-## Switching Between Ollama and OpenAI
-
-The `AeroAiLlmSession` automatically detects which client you're using and selects the appropriate prompt template:
-
+## Switching models
+Swap between OpenAI and Ollama via the `ILlmClient` interface:
 ```csharp
-// Use Ollama (local)
-var ollama = new OllamaLlmClient("http://192.168.1.100:11434", "aeroai");
-var session1 = new AeroAiLlmSession(ollama, context);
-
-// Use OpenAI (cloud)
-var openai = new OpenAiLlmClient(apiKey, "gpt-4o-mini");
-var session2 = new AeroAiLlmSession(openai, context);
+ILlmClient llm = new OpenAiLlmClient(apiKey, "gpt-4o-mini");
+llm = new OllamaLlmClient("http://localhost:11434", "aeroai");
 ```
+`AeroAiLlmSession` or `AeroAiPhraseEngine` work with either client.
 
-Both use the same `ILlmClient` interface, so switching is seamless.
-
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | Your OpenAI API key (required) | - |
-| `OPENAI_MODEL` | Model to use | `gpt-4o-mini` |
-| `OPENAI_BASE_URL` | API base URL | `https://api.openai.com/v1` |
-| `AEROAI_SYSTEM_PROMPT_PATH` | Path to system prompt file | `prompts/aeroai_system_prompt.txt` |
-
-## Cost Considerations
-
-- **GPT-4o-mini**: ~$0.15 per 1M input tokens, ~$0.60 per 1M output tokens
-- Typical ATC response: ~50-100 tokens
-- Estimated cost per interaction: **$0.0001 - $0.0002** (very cheap)
-
-For high-volume testing, consider using Ollama with a local model to avoid API costs.
+## Troubleshooting
+- 404s: base URL is hardcoded to `https://api.openai.com/v1/`; 404s typically indicate proxy/VPN issues (see `TROUBLESHOOTING_404.md`).
+- Key format: must start with `sk-` or `sk-proj-` (enforced by `EnvironmentConfig.GetOpenAiApiKey()`).
 

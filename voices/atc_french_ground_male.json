@@ -3,8 +3,12 @@
   "display_name": "French Ground (Male)",
   "tts_model": "gpt-4o-mini-tts",
   "tts_voice": "alloy",
-  "style_hint": "French-accented English, male voice, clear ground/taxi instructions.",
-  "speaking_rate": 1.0,
-  "region_codes": ["LF"],
-  "controller_types": ["GROUND"]
+  "style_hint": "French-accented English, deep male voice, clear ground/taxi instructions.",
+  "speaking_rate": 1.1,
+  "region_codes": [
+    "LF"
+  ],
+  "controller_types": [
+    "GROUND"
+  ]
 }

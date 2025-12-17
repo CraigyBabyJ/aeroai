@@ -103,7 +103,11 @@ public sealed class SimBriefClient : IDisposable
     {
         // JSON structure - try both v1 and v2 formats
         var originIcao = string.Empty;
+        var originName = string.Empty;
+        string? originMetar = null;
         var destIcao = string.Empty;
+        var destName = string.Empty;
+        string? destMetar = null;
         var altIcao = string.Empty;
         var plannedDepRunway = string.Empty;
         var plannedArrRunway = string.Empty;
@@ -112,6 +116,7 @@ public sealed class SimBriefClient : IDisposable
         string airlineIcao = string.Empty;
         string flightNumber = string.Empty;
         string route = string.Empty;
+        string aircraftIcao = string.Empty;
         int cruiseFl = 0;
 
         // Try v2 format first (nested structure)
@@ -127,6 +132,10 @@ public sealed class SimBriefClient : IDisposable
                         : string.Empty;
                 }
 
+                originName = TryGetString(originElem, "name")
+                    ?? TryGetString(originElem, "airport_name")
+                    ?? originName;
+
                 // Planned departure runway (several possible field names)
                 plannedDepRunway = TryGetString(originElem, "plan_rwy")
                     ?? TryGetString(originElem, "plan_runway")
@@ -140,6 +149,11 @@ public sealed class SimBriefClient : IDisposable
                     ?? TryGetString(originElem, "orig_sid")
                     ?? TryGetString(originElem, "plan_sid")
                     ?? plannedSid;
+
+                originMetar = TryGetString(originElem, "metar")
+                    ?? TryGetString(originElem, "wx_metar")
+                    ?? TryGetString(originElem, "wx_obs")
+                    ?? originMetar;
             }
             else if (originElem.ValueKind == JsonValueKind.String)
             {
@@ -160,10 +174,19 @@ public sealed class SimBriefClient : IDisposable
                         : string.Empty;
                 }
 
+                destName = TryGetString(destElem, "name")
+                    ?? TryGetString(destElem, "airport_name")
+                    ?? destName;
+
                 plannedArrRunway = TryGetString(destElem, "plan_rwy")
                     ?? TryGetString(destElem, "plan_runway")
                     ?? TryGetString(destElem, "arr_rwy")
                     ?? plannedArrRunway;
+
+                destMetar = TryGetString(destElem, "metar")
+                    ?? TryGetString(destElem, "wx_metar")
+                    ?? TryGetString(destElem, "wx_obs")
+                    ?? destMetar;
             }
             else if (destElem.ValueKind == JsonValueKind.String)
             {
@@ -225,8 +248,30 @@ public sealed class SimBriefClient : IDisposable
                 ?? TryGetString(gen, "plan_sid")
                 ?? plannedSid;
 
+            if (string.IsNullOrWhiteSpace(originName))
+            {
+                originName = TryGetString(gen, "orig_name")
+                    ?? TryGetString(gen, "origin_name")
+                    ?? originName;
+            }
+            if (string.IsNullOrWhiteSpace(destName))
+            {
+                destName = TryGetString(gen, "dest_name")
+                    ?? TryGetString(gen, "destination_name")
+                    ?? destName;
+            }
+
             if (gen.TryGetProperty("route", out var r) && r.ValueKind == JsonValueKind.String)
                 route = r.GetString() ?? string.Empty;
+
+            // Aircraft ICAO/type (common SimBrief fields)
+            aircraftIcao = TryGetString(gen, "aircraft_icao")
+                ?? TryGetString(gen, "aircraft_type")
+                ?? TryGetString(gen, "aircraft")
+                ?? TryGetString(gen, "airframe_icao")
+                ?? TryGetString(gen, "aircraft_short")
+                ?? TryGetString(gen, "type")
+                ?? aircraftIcao;
 
             if (gen.TryGetProperty("initial_altitude", out var altElem2))
             {
@@ -257,6 +302,27 @@ public sealed class SimBriefClient : IDisposable
 
             if (root.TryGetProperty("route", out var r) && r.ValueKind == JsonValueKind.String)
                 route = r.GetString() ?? string.Empty;
+
+            if (root.TryGetProperty("aircraft_icao", out var aIcaoFlat) && aIcaoFlat.ValueKind == JsonValueKind.String)
+                aircraftIcao = aIcaoFlat.GetString() ?? aircraftIcao;
+        }
+
+        // Aircraft object (v2 structure)
+        if (string.IsNullOrWhiteSpace(aircraftIcao) && root.TryGetProperty("aircraft", out var aircraftObj) && aircraftObj.ValueKind == JsonValueKind.Object)
+        {
+            aircraftIcao = TryGetString(aircraftObj, "icao_code")
+                ?? TryGetString(aircraftObj, "icao")
+                ?? TryGetString(aircraftObj, "type")
+                ?? aircraftIcao;
+        }
+
+        // Airframe object (sometimes used instead of "aircraft")
+        if (string.IsNullOrWhiteSpace(aircraftIcao) && root.TryGetProperty("airframe", out var airframeObj) && airframeObj.ValueKind == JsonValueKind.Object)
+        {
+            aircraftIcao = TryGetString(airframeObj, "icao_code")
+                ?? TryGetString(airframeObj, "icao")
+                ?? TryGetString(airframeObj, "type")
+                ?? aircraftIcao;
         }
 
         // Parse navlog waypoints - this is the key data we need for enroute routing
@@ -372,10 +438,15 @@ public sealed class SimBriefClient : IDisposable
             }
         }
 
+        originName = originName?.Trim() ?? string.Empty;
+        destName = destName?.Trim() ?? string.Empty;
+
         return new FlightPlan
         {
             OriginIcao = originIcao.ToUpperInvariant(),
+            OriginMetar = string.IsNullOrWhiteSpace(originMetar) ? null : originMetar.Trim(),
             DestinationIcao = destIcao.ToUpperInvariant(),
+            DestinationMetar = string.IsNullOrWhiteSpace(destMetar) ? null : destMetar.Trim(),
             AlternateIcao = altIcao.ToUpperInvariant(),
             AirlineIcao = airlineIcao.ToUpperInvariant(),
             Callsign = callsign.ToUpperInvariant(),
@@ -385,7 +456,10 @@ public sealed class SimBriefClient : IDisposable
             PlannedSid = plannedSid.ToUpperInvariant(),
             Route = route,
             CruiseFlightLevel = cruiseFl,
-            WaypointIdentifiers = waypoints
+            AircraftIcao = aircraftIcao.ToUpperInvariant(),
+            WaypointIdentifiers = waypoints,
+            OriginName = originName,
+            DestinationName = destName
         };
     }
 
@@ -396,20 +470,24 @@ public sealed class SimBriefClient : IDisposable
         if (root == null)
             return null;
 
-        var originIcao = root.Element("origin")?.Element("icao_code")?.Value ?? 
-                        root.Element("origin")?.Value ?? string.Empty;
-        var destIcao = root.Element("destination")?.Element("icao_code")?.Value ?? 
-                      root.Element("destination")?.Value ?? string.Empty;
+        var originElem = root.Element("origin");
+        var destElem = root.Element("destination");
+        var originIcao = originElem?.Element("icao_code")?.Value ?? originElem?.Value ?? string.Empty;
+        var originName = originElem?.Element("name")?.Value ?? originElem?.Element("orig_name")?.Value ?? string.Empty;
+        var originMetar = originElem?.Element("metar")?.Value ?? originElem?.Element("wx_obs")?.Value ?? string.Empty;
+        var destIcao = destElem?.Element("icao_code")?.Value ?? destElem?.Value ?? string.Empty;
+        var destName = destElem?.Element("name")?.Value ?? destElem?.Element("dest_name")?.Value ?? string.Empty;
+        var destMetar = destElem?.Element("metar")?.Value ?? destElem?.Element("wx_obs")?.Value ?? string.Empty;
         var altIcao = root.Element("alternate")?.Element("icao_code")?.Value ?? 
                      root.Element("alternate")?.Value ?? string.Empty;
 
-        var plannedDepRunway = root.Element("origin")?.Element("plan_rwy")?.Value
-            ?? root.Element("origin")?.Element("orig_rwy")?.Value
+        var plannedDepRunway = originElem?.Element("plan_rwy")?.Value
+            ?? originElem?.Element("orig_rwy")?.Value
             ?? string.Empty;
-        var plannedArrRunway = root.Element("destination")?.Element("plan_rwy")?.Value
-            ?? root.Element("destination")?.Element("arr_rwy")?.Value
+        var plannedArrRunway = destElem?.Element("plan_rwy")?.Value
+            ?? destElem?.Element("arr_rwy")?.Value
             ?? string.Empty;
-        var plannedSid = root.Element("origin")?.Element("sid")?.Value
+        var plannedSid = originElem?.Element("sid")?.Value
             ?? root.Element("general")?.Element("sid")?.Value
             ?? string.Empty;
 
@@ -427,6 +505,19 @@ public sealed class SimBriefClient : IDisposable
         }
         var flightNumber = general?.Element("flight_number")?.Value ?? string.Empty;
         var route = general?.Element("route")?.Value ?? string.Empty;
+        var aircraftIcao = general?.Element("aircraft_icao")?.Value
+            ?? general?.Element("aircraft_type")?.Value
+            ?? general?.Element("aircraft")?.Value
+            ?? general?.Element("airframe_icao")?.Value
+            ?? general?.Element("aircraft_short")?.Value
+            ?? general?.Element("type")?.Value
+            ?? root.Element("aircraft")?.Element("icao_code")?.Value
+            ?? root.Element("aircraft")?.Element("icao")?.Value
+            ?? root.Element("aircraft")?.Element("type")?.Value
+            ?? root.Element("airframe")?.Element("icao_code")?.Value
+            ?? root.Element("airframe")?.Element("icao")?.Value
+            ?? root.Element("airframe")?.Element("type")?.Value
+            ?? string.Empty;
         if (string.IsNullOrWhiteSpace(plannedDepRunway))
         {
             plannedDepRunway = general?.Element("plan_rwy")?.Value
@@ -443,6 +534,18 @@ public sealed class SimBriefClient : IDisposable
         {
             plannedSid = general?.Element("sid")?.Value
                 ?? plannedSid;
+        }
+        if (string.IsNullOrWhiteSpace(originName))
+        {
+            originName = general?.Element("orig_name")?.Value
+                ?? general?.Element("origin_name")?.Value
+                ?? originName;
+        }
+        if (string.IsNullOrWhiteSpace(destName))
+        {
+            destName = general?.Element("dest_name")?.Value
+                ?? general?.Element("destination_name")?.Value
+                ?? destName;
         }
         
         int cruiseFl = 0;
@@ -474,10 +577,15 @@ public sealed class SimBriefClient : IDisposable
             }
         }
 
+        originName = originName?.Trim() ?? string.Empty;
+        destName = destName?.Trim() ?? string.Empty;
+
         return new FlightPlan
         {
             OriginIcao = originIcao.ToUpperInvariant(),
+            OriginMetar = string.IsNullOrWhiteSpace(originMetar) ? null : originMetar.Trim(),
             DestinationIcao = destIcao.ToUpperInvariant(),
+            DestinationMetar = string.IsNullOrWhiteSpace(destMetar) ? null : destMetar.Trim(),
             AlternateIcao = altIcao.ToUpperInvariant(),
             AirlineIcao = airlineIcao.ToUpperInvariant(),
             Callsign = callsign.ToUpperInvariant(),
@@ -486,7 +594,10 @@ public sealed class SimBriefClient : IDisposable
             PlannedArrivalRunway = plannedArrRunway.ToUpperInvariant(),
             PlannedSid = plannedSid.ToUpperInvariant(),
             Route = route,
-            CruiseFlightLevel = cruiseFl
+            CruiseFlightLevel = cruiseFl,
+            AircraftIcao = aircraftIcao.ToUpperInvariant(),
+            OriginName = originName,
+            DestinationName = destName
         };
     }
 
