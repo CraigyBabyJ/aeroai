@@ -81,13 +81,13 @@ openaip_airspace_all_openair.txt
 .tools/
 
 # XTTS / local Python environments and generated artifacts
-XTTS_voicelab/.venv/
-XTTS_voicelab/**/venv/
-XTTS_voicelab/**/__pycache__/
-XTTS_voicelab/**/.pytest_cache/
-XTTS_voicelab/**/.mypy_cache/
-XTTS_voicelab/xtts_service/cache_audio/
-XTTS_voicelab/xtts_service/data/cache.db
-XTTS_voicelab/**/outputs/
-XTTS_voicelab/**/logs/
-XTTS_voicelab/**/tmp*.wav
+voicelab/.venv/
+voicelab/**/venv/
+voicelab/**/__pycache__/
+voicelab/**/.pytest_cache/
+voicelab/**/.mypy_cache/
+voicelab/xtts_service/cache_audio/
+voicelab/xtts_service/data/cache.db
+voicelab/**/outputs/
+voicelab/**/logs/
+voicelab/**/tmp*.wav
