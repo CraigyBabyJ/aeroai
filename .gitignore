@@ -53,12 +53,11 @@ Thumbs.db
 
 # Whisper binaries and models (local-only, do not commit)
 whisper/
-whisper-fast/
-whisper-fast/
 
+# whisper-fast service code can be committed, but never commit its venv/caches
 whisper-fast/venv/
-whisper-fast/*.pyc
 whisper-fast/__pycache__/
+whisper-fast/*.pyc
 
 # Local config / secrets (keep local, do not commit)
 checkwx.json
@@ -87,6 +86,7 @@ XTTS_voicelab/**/__pycache__/
 XTTS_voicelab/**/.pytest_cache/
 XTTS_voicelab/**/.mypy_cache/
 XTTS_voicelab/xtts_service/cache_audio/
+XTTS_voicelab/xtts_service/data/cache.db
 XTTS_voicelab/**/outputs/
 XTTS_voicelab/**/logs/
 XTTS_voicelab/**/tmp*.wav
