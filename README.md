@@ -12,14 +12,14 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 ## Requirements
 - Windows with .NET 8 SDK
 - OpenAI API key in `.env` (defaults to a fine-tuned `OPENAI_MODEL` if you do not set one)
-- SimBrief pilot ID; optional CheckWX API key in `checkwx.json` for live METARs/ATIS letters
+- SimBrief pilot ID; optional CheckWX API key in a local `checkwx.json` (see `checkwx.example.json`) for live METARs/ATIS letters
 - Optional navdata SQLite path (`AEROAI_NAVDATA_PATH`) for runway selection
 - STT: `whisper-cli.exe` + `whisper/models/ggml-medium.en-q5_0.bin` (default), or Python 3.10+ with `faster-whisper` for whisper-fast
 
 ## Setup
 1) `copy .env.example .env` and fill `OPENAI_API_KEY` (plus `OPENAI_MODEL` if you want to override the default). Set `STT_BACKEND=whisper-fast` and `WHISPER_FAST_*` if you prefer the faster backend.
 2) Place `whisper/whisper-cli.exe` and `whisper/models/ggml-medium.en-q5_0.bin`, or set up whisper-fast (`python -m venv whisper-fast/venv`, activate, `pip install faster-whisper`, adjust `.env` if needed).
-3) Add your CheckWX key to `checkwx.json` (format: `{"ApiKey": "…"}`) and, if available, set `AEROAI_NAVDATA_PATH` to your PMDG/navdata SQLite for better runway selection.
+3) Copy `checkwx.example.json` → `checkwx.json` and add your CheckWX key (format: `{"ApiKey": "…"}`); `checkwx.json` is gitignored so it won't be committed. If available, set `AEROAI_NAVDATA_PATH` to your PMDG/navdata SQLite for better runway selection.
 4) (Optional) Enable TTS by setting `AEROAI_TTS_ENABLED=true` and OpenAI voice vars; edit `voices/*.json` and `Config/audio-effects.json` to tune radio effects and profiles.
 5) Build: `dotnet build AeroAI.sln`.
 
