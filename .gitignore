@@ -66,6 +66,7 @@ userconfig.json
 
 # Local caches / databases
 openaip_cache.db
+openaip_airspace_all_openair.txt
 *.db-shm
 *.db-wal
 *.sqlite
