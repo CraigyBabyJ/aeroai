@@ -86,6 +86,7 @@ XTTS_voicelab/**/venv/
 XTTS_voicelab/**/__pycache__/
 XTTS_voicelab/**/.pytest_cache/
 XTTS_voicelab/**/.mypy_cache/
+XTTS_voicelab/xtts_service/cache_audio/
 XTTS_voicelab/**/outputs/
 XTTS_voicelab/**/logs/
 XTTS_voicelab/**/tmp*.wav
