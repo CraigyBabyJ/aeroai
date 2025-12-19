@@ -1,4 +1,4 @@
-# XTTS Voice Lab
+# Voice Lab
 
 Standalone FastAPI service with a lightweight web UI for exercising XTTS voices without touching the AeroAI app. It exposes a small API surface for TTS, cache inspection, and phrase-pack prefetching, backed by SQLite indexing and on-disk WAV caching. English-only; accent comes from your reference clips.
 
