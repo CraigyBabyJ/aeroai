@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XTTS Voice Lab</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">XTTS Voice Lab</p>
+        <h1>Play with voices, cache samples, and prefetch phrase packs.</h1>
+        <p class="lede">This UI talks to the FastAPI service running locally. Generate a clip, warm the cache, and inspect recent items without touching the AeroAI app.</p>
+      </div>
+      <div class="health" id="health-card">
+        <div class="health-row">
+          <span>Model</span>
+          <strong id="health-model">...</strong>
+        </div>
+        <div class="health-row">
+          <span>CUDA</span>
+          <strong id="health-cuda">...</strong>
+        </div>
+        <div class="health-row">
+          <span>Cached</span>
+          <strong id="health-cache">...</strong>
+        </div>
+        <div class="health-row">
+          <span>Engine</span>
+          <strong id="health-engine">...</strong>
+        </div>
+      </div>
+    </header>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Generate</p>
+          <h2>Text to speech</h2>
+        </div>
+        <div class="inline-actions">
+          <button id="refresh-voices" class="ghost">Refresh voices</button>
+          <button id="refresh-stats" class="ghost">Refresh cache</button>
+        </div>
+      </div>
+      <form id="tts-form" class="form-grid">
+        <label>
+          <span>Voice</span>
+          <select id="voice-select" required></select>
+        </label>
+        <label>
+          <span>Role</span>
+          <select id="role-select"></select>
+        </label>
+        <label>
+          <span>Radio profile</span>
+          <select id="radio-select">
+            <option value="">Flat / none</option>
+          </select>
+        </label>
+        <label>
+          <span>Speed</span>
+          <div class="slider">
+            <input id="speed-input" type="range" min="0.5" max="1.5" step="0.1" value="1.0">
+            <span id="speed-display">1.0x</span>
+          </div>
+        </label>
+        <label>
+          <span>Hard pause (ms)</span>
+          <input id="pause-hard" type="number" min="0" max="1000" step="10" value="90">
+        </label>
+        <label>
+          <span>Soft pause (ms)</span>
+          <input id="pause-soft" type="number" min="0" max="1000" step="10" value="70">
+        </label>
+        <label class="full">
+          <span>Text</span>
+          <div class="seg-controls">
+            <button type="button" id="insert-pipe" class="ghost small">Insert | Break</button>
+            <button type="button" id="insert-newline" class="ghost small">New Line</button>
+            <span class="helper">Use | or new lines to separate ATC chunks (recommended). Commas are optional.</span>
+          </div>
+          <textarea id="text-input" rows="3" placeholder="Type something to synthesize"></textarea>
+          <div id="segment-preview" class="segment-preview"></div>
+        </label>
+        <div class="form-actions">
+          <button type="submit" id="tts-submit">Generate</button>
+          <div class="status" id="tts-status"></div>
+        </div>
+      </form>
+      <div class="player">
+        <audio id="player" controls></audio>
+        <div id="cache-hit" class="badge hidden">Cache</div>
+        <div id="cache-mode" class="badge ghost hidden"></div>
+        <div id="cache-segments" class="badge ghost hidden"></div>
+        <div id="cache-delimiter" class="badge ghost hidden"></div>
+        <div id="cache-key" class="badge ghost hidden"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Warm it up</p>
+          <h2>Prefetch phrase packs</h2>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>
+          <span>Phrase set</span>
+          <select id="phraseset-select"></select>
+        </label>
+        <label>
+          <span>Limit</span>
+          <input id="prefetch-limit" type="number" min="1" max="50" placeholder="optional">
+        </label>
+        <div class="form-actions">
+          <button id="prefetch-btn">Prefetch</button>
+          <div class="status" id="prefetch-status"></div>
+        </div>
+      </div>
+      <div id="prefetch-results" class="results"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Cache</p>
+          <h2>Recent items</h2>
+        </div>
+        <div class="inline-actions">
+          <button id="clear-cache" class="danger ghost">Clear cache</button>
+        </div>
+      </div>
+      <div id="recent-list" class="recent"></div>
+    </section>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
