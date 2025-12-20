@@ -7,6 +7,7 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 - SimBrief import plus navdata-aware runway/SID selection, live METAR/ATIS letter caching via CheckWX, and airport/airline name resolution.
 - OpenAI phrase engine with guard rails (ReadbackValidator, AtcResponseValidator, spoken-number/callsign/aircraft normalizers) to stop hallucinated runways, squawks, or frequencies.
 - Optional OpenAI TTS with voice profiles in `voices/`, radio effects from `Config/audio-effects.json`, and per-flight chat logging to `%APPDATA%\\AeroAI\\logs`.
+- VoiceLab TTS (FastAPI) is the default local TTS backend when enabled; the base URL is stored in `userconfig.json`.
 - Deterministic STT correction layer driven by `Config/stt_corrections.json` (hot-reloads when the file changes).
 
 ## Requirements
@@ -20,8 +21,9 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 1) `copy .env.example .env` and fill `OPENAI_API_KEY` (plus `OPENAI_MODEL` if you want to override the default). Set `STT_BACKEND=whisper-fast` and `WHISPER_FAST_*` if you prefer the faster backend.
 2) Place `whisper/whisper-cli.exe` and `whisper/models/ggml-medium.en-q5_0.bin`, or set up whisper-fast (`python -m venv whisper-fast/venv`, activate, `pip install faster-whisper`, adjust `.env` if needed).
 3) Copy `checkwx.example.json` → `checkwx.json` and add your CheckWX key (format: `{"ApiKey": "…"}`); `checkwx.json` is gitignored so it won't be committed. If available, set `AEROAI_NAVDATA_PATH` to your PMDG/navdata SQLite for better runway selection.
-4) (Optional) Enable TTS by setting `AEROAI_TTS_ENABLED=true` and OpenAI voice vars; edit `voices/*.json` and `Config/audio-effects.json` to tune radio effects and profiles.
-5) Build: `dotnet build AeroAI.sln`.
+4) (Optional) Enable OpenAI TTS by setting `AEROAI_TTS_ENABLED=true` and OpenAI voice vars; edit `voices/*.json` and `Config/audio-effects.json` to tune radio effects and profiles.
+5) (Optional) Run VoiceLab TTS: from `voicelab/`, start `python -m uvicorn xtts_service.app:app --host 127.0.0.1 --port 8008`. Adjust the base URL in Settings (stored in `userconfig.json`) if you host it elsewhere.
+6) Build: `dotnet build AeroAI.sln`.
 
 ## Running
 - Desktop UI: `dotnet run --project AeroAI.UI`. Enter your SimBrief pilot ID in Settings (or via the SimBrief dialog), import the flight plan, then hold the PTT button or type to talk to ATC. Transcripts and ATC replies are logged under `%APPDATA%\\AeroAI\\logs`.
