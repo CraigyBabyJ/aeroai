@@ -282,6 +282,32 @@
                                    Foreground="{StaticResource AccentYellowBrush}"/>
                     </StackPanel>
                 </Border>
+
+                <Border Background="#2a2a4a" CornerRadius="4" Padding="12,8" Margin="15,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Connected to" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="ConnectedToCombo"
+                                  MinWidth="180"
+                                  Background="#1f2b40"
+                                  Foreground="{StaticResource TextPrimaryBrush}"
+                                  BorderThickness="0"
+                                  SelectionChanged="ConnectedToCombo_SelectionChanged"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <TextBlock x:Name="NextControllerHint"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="11"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="NextControllerSwitchButton"
+                                    Content="Switch"
+                                    Style="{DynamicResource NavButton}"
+                                    Padding="6,2"
+                                    Margin="8,0,0,0"
+                                    FontSize="11"
+                                    Click="NextControllerSwitchButton_Click"
+                                    Visibility="Collapsed"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </Border>
         
@@ -382,7 +408,14 @@
         <!-- Message History -->
         <Border x:Name="MessagesPanel" Grid.Row="4" Margin="10,0" CornerRadius="8" Background="{StaticResource BackgroundMediumBrush}">
             <Grid>
-                <TextBlock Text="ATC messages will appear here"
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border x:Name="HandoffPromptPanel" Grid.Row="0" Background="#23334d" CornerRadius="6" Padding="10,6" Margin="10,8,10,0" Visibility="Collapsed">
+                    <TextBlock x:Name="HandoffPromptText" Foreground="{StaticResource AccentYellowBrush}" FontSize="12" TextWrapping="Wrap"/>
+                </Border>
+                <TextBlock Grid.Row="1" Text="ATC messages will appear here"
                            Opacity="0.08"
                            FontSize="32"
                            FontWeight="Bold"
@@ -399,7 +432,7 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <ScrollViewer x:Name="MessageScroller" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Grid.Row="1" x:Name="MessageScroller" VerticalScrollBarVisibility="Auto">
                     <ItemsControl x:Name="MessageList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

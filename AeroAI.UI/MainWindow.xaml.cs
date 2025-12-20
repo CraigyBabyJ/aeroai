@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading;
@@ -36,6 +37,16 @@ public partial class MainWindow : Window
     private bool _isTranscribing;
     private string _lastAtcMessage = string.Empty;
     private bool _firstPilotContact = true;
+    private readonly ObservableCollection<FrequencyOption> _frequencyOptions = new();
+    private FrequencyOption? _selectedFrequency;
+    private FrequencyOption? _suggestedController;
+    private string? _connectedControllerRole;
+    private double? _connectedControllerFrequency;
+    private string? _pendingHandoffRole;
+    private double? _pendingHandoffFrequency;
+    private DateTime? _pendingHandoffIssuedAt;
+    private bool _pendingHandoffActive;
+    private bool _suppressFrequencySelection;
     private readonly SolidColorBrush _recordingBrush = new(Color.FromRgb(0xff, 0x55, 0x55));
     private readonly SolidColorBrush _transcribingBrush = new(Color.FromRgb(0xff, 0xa5, 0x00));
     private SolidColorBrush? _idleMicBrush;
@@ -52,11 +63,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         MessageList.ItemsSource = Messages;
+        ConnectedToCombo.ItemsSource = _frequencyOptions;
+        ConnectedToCombo.DisplayMemberPath = nameof(FrequencyOption.Display);
+        SetFrequencyPlaceholder("Import SimBrief to load frequencies.");
         
         _atcService = new AtcService();
         _atcService.OnAtcMessage += OnAtcMessageReceived;
         _atcService.OnFlightContextUpdated += OnFlightContextUpdated;
         _atcService.OnDebug += OnDebugReceived;
+        _atcService.OnTtsNotice += OnTtsNoticeReceived;
 
         _sttDebugLog = msg =>
         {
@@ -93,6 +108,7 @@ public partial class MainWindow : Window
         {
             UpdateStationBadge(station);
             AddAtcMessage(station, message);
+            HandleHandoffPrompt(message);
         });
     }
 
@@ -149,28 +165,331 @@ public partial class MainWindow : Window
             if (AeroAI.Data.AirportFrequencies.TryGetFrequencies(context.OriginIcao, out var freqs))
             {
                 if (freqs.Clearance is double clr) ClrFreq.Text = clr.ToString("F3");
-                if (freqs.Ground is double gnd)
-                {
-                    var freq = gnd.ToString("F3");
-                    GndFreq.Text = freq;
-                    if (string.IsNullOrWhiteSpace(Com1Freq.Text) || Com1Freq.Text == "---")
-                        Com1Freq.Text = freq;
-                }
+                if (freqs.Ground is double gnd) GndFreq.Text = gnd.ToString("F3");
                 if (freqs.Tower is double twr) TwrFreq.Text = twr.ToString("F3");
                 if (freqs.Departure is double dep) DepFreq.Text = dep.ToString("F3");
-
-                // Prefer clearance/delivery for COM1 if available, else ground, else tower.
-                if (freqs.Clearance is double clrPref)
-                    Com1Freq.Text = clrPref.ToString("F3");
-                else if (freqs.Ground is double gndPref)
-                    Com1Freq.Text = gndPref.ToString("F3");
-                else if (freqs.Tower is double twrPref)
-                    Com1Freq.Text = twrPref.ToString("F3");
             }
+            var controllers = AirportFrequencyService.GetControllers(context.OriginIcao);
+            UpdateFrequencyOptions(controllers, context.OriginIcao);
+            UpdateNextControllerHint(context, controllers);
 
             // Update airport name (would need lookup)
             AirportName.Text = AirportNameResolver.ResolveAirportName(context.OriginIcao, _atcService.CurrentFlight);
         });
+    }
+
+    private void UpdateFrequencyOptions(IReadOnlyList<ControllerFrequency> controllers, string? icao)
+    {
+        _frequencyOptions.Clear();
+        foreach (var controller in controllers)
+        {
+            _frequencyOptions.Add(new FrequencyOption(controller.Role, controller.FrequencyMhz));
+        }
+
+        if (_frequencyOptions.Count == 0)
+        {
+            var label = string.IsNullOrWhiteSpace(icao)
+                ? "Import SimBrief to load frequencies."
+                : $"No frequencies available for {icao}.";
+            SetFrequencyPlaceholder(label);
+            UpdateNextControllerHint(null, controllers);
+            return;
+        }
+
+        if (ConnectedToCombo != null)
+            ConnectedToCombo.IsEnabled = true;
+
+        FrequencyOption? selection = null;
+        if (_selectedFrequency != null && !_selectedFrequency.IsPlaceholder)
+            selection = FindFrequencyOption(_selectedFrequency.Role, _selectedFrequency.FrequencyMhz);
+
+        if (selection == null)
+            selection = ChooseDefaultFrequency();
+
+        SetSelectedFrequency(selection, updateComDisplay: true, userInitiated: false);
+    }
+
+    private FrequencyOption? FindFrequencyOption(string role, double frequencyMhz)
+    {
+        return _frequencyOptions.FirstOrDefault(option =>
+            !option.IsPlaceholder &&
+            option.Role.Equals(role, StringComparison.OrdinalIgnoreCase) &&
+            Math.Abs(option.FrequencyMhz - frequencyMhz) < 0.005);
+    }
+
+    private FrequencyOption? ChooseDefaultFrequency()
+    {
+        var order = new[] { "Clearance", "Ground", "Tower", "Departure", "Approach" };
+        foreach (var role in order)
+        {
+            var match = _frequencyOptions.FirstOrDefault(option =>
+                !option.IsPlaceholder &&
+                option.Role.Equals(role, StringComparison.OrdinalIgnoreCase));
+            if (match != null)
+                return match;
+        }
+        return _frequencyOptions.FirstOrDefault(option => !option.IsPlaceholder);
+    }
+
+    private void SetSelectedFrequency(FrequencyOption? option, bool updateComDisplay, bool userInitiated)
+    {
+        _selectedFrequency = option;
+        if (ConnectedToCombo != null)
+        {
+            _suppressFrequencySelection = true;
+            ConnectedToCombo.SelectedItem = option;
+            _suppressFrequencySelection = false;
+        }
+
+        if (updateComDisplay && option != null && !option.IsPlaceholder)
+        {
+            Com1Freq.Text = option.FrequencyMhz.ToString("F3");
+        }
+        else if (updateComDisplay)
+        {
+            Com1Freq.Text = "---";
+        }
+
+        if (option != null && !option.IsPlaceholder)
+        {
+            _connectedControllerRole = NormalizeConnectedRole(option.Role);
+            _connectedControllerFrequency = option.FrequencyMhz;
+            _atcService.UpdateConnectedController(_connectedControllerRole, _connectedControllerFrequency);
+        }
+        else
+        {
+            _connectedControllerRole = null;
+            _connectedControllerFrequency = null;
+            _atcService.UpdateConnectedController(null, null);
+        }
+
+        if (userInitiated && option != null && !option.IsPlaceholder)
+            TryAcknowledgeHandoff(option);
+
+        if (option != null)
+        {
+            var controllers = _frequencyOptions
+                .Where(o => !o.IsPlaceholder)
+                .Select(o => new ControllerFrequency(o.Role, o.FrequencyMhz))
+                .ToList();
+            UpdateNextControllerHint(_atcService.CurrentFlight, controllers);
+        }
+    }
+
+    private void ConnectedToCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressFrequencySelection)
+            return;
+
+        if (ConnectedToCombo.SelectedItem is FrequencyOption option)
+        {
+            if (option.IsPlaceholder)
+                return;
+            SetSelectedFrequency(option, updateComDisplay: true, userInitiated: true);
+        }
+    }
+
+    private void SetFrequencyPlaceholder(string message)
+    {
+        _frequencyOptions.Clear();
+        var placeholder = FrequencyOption.Placeholder(message);
+        _frequencyOptions.Add(placeholder);
+        _selectedFrequency = placeholder;
+        _suppressFrequencySelection = true;
+        ConnectedToCombo.SelectedItem = placeholder;
+        _suppressFrequencySelection = false;
+        ConnectedToCombo.IsEnabled = false;
+        Com1Freq.Text = "---";
+        if (NextControllerHint != null)
+            NextControllerHint.Text = string.Empty;
+        if (NextControllerSwitchButton != null)
+            NextControllerSwitchButton.Visibility = Visibility.Collapsed;
+        _suggestedController = null;
+        _connectedControllerRole = null;
+        _connectedControllerFrequency = null;
+        _atcService.UpdateConnectedController(null, null);
+    }
+
+    private void HandleHandoffPrompt(string message)
+    {
+        if (_pendingHandoffActive)
+            return;
+
+        var pending = TryParseHandoff(message);
+        if (pending == null)
+            return;
+
+        _pendingHandoffRole = NormalizeRole(pending.Role);
+        _pendingHandoffFrequency = pending.FrequencyMhz;
+        _pendingHandoffIssuedAt = DateTime.UtcNow;
+        _pendingHandoffActive = true;
+        ShowHandoffPrompt();
+        var controllers = _frequencyOptions
+            .Where(o => !o.IsPlaceholder)
+            .Select(o => new ControllerFrequency(o.Role, o.FrequencyMhz))
+            .ToList();
+        UpdateNextControllerHint(_atcService.CurrentFlight, controllers);
+    }
+
+    private HandoffMatch? TryParseHandoff(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return null;
+
+        var match = Regex.Match(
+            message,
+            @"\b(contact|switch to|monitor|call)\b.*?\b(?<role>tower|ground|departure|approach|center|delivery|clearance)\b.*?\b(?<freq>\d{3}\.\d{1,3})",
+            RegexOptions.IgnoreCase);
+
+        if (!match.Success)
+        {
+            match = Regex.Match(
+                message,
+                @"\b(contact|switch to|monitor|call)\b.*?\b(?<freq>\d{3}\.\d{1,3}).*?\b(?<role>tower|ground|departure|approach|center|delivery|clearance)\b",
+                RegexOptions.IgnoreCase);
+        }
+
+        if (!match.Success)
+            return null;
+
+        var roleRaw = match.Groups["role"].Value;
+        var freqRaw = match.Groups["freq"].Value;
+        if (string.IsNullOrWhiteSpace(roleRaw) || string.IsNullOrWhiteSpace(freqRaw))
+            return null;
+
+        if (!double.TryParse(freqRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out var freq))
+            return null;
+
+        return new HandoffMatch(roleRaw, freq);
+    }
+
+    private void ShowHandoffPrompt()
+    {
+        if (HandoffPromptPanel == null || HandoffPromptText == null)
+            return;
+
+        if (!_pendingHandoffActive || string.IsNullOrWhiteSpace(_pendingHandoffRole) || _pendingHandoffFrequency == null)
+        {
+            HandoffPromptPanel.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        HandoffPromptText.Text = $"Handoff: Select {_pendingHandoffRole} ({_pendingHandoffFrequency.Value:F3}) in the Connected to dropdown.";
+        HandoffPromptPanel.Visibility = Visibility.Visible;
+    }
+
+    private void TryAcknowledgeHandoff(FrequencyOption selection)
+    {
+        if (!_pendingHandoffActive || string.IsNullOrWhiteSpace(_pendingHandoffRole) || _pendingHandoffFrequency == null)
+            return;
+
+        if (!RolesMatch(selection.Role, _pendingHandoffRole))
+            return;
+
+        if (Math.Abs(selection.FrequencyMhz - _pendingHandoffFrequency.Value) > 0.005)
+            return;
+
+        var acknowledgedRole = _pendingHandoffRole;
+        var acknowledgedFrequency = _pendingHandoffFrequency.Value;
+        _pendingHandoffRole = null;
+        _pendingHandoffFrequency = null;
+        _pendingHandoffIssuedAt = null;
+        _pendingHandoffActive = false;
+        if (HandoffPromptPanel != null)
+            HandoffPromptPanel.Visibility = Visibility.Collapsed;
+
+        AddSystemMessage($"Handoff acknowledged: {acknowledgedRole} {acknowledgedFrequency:F3}.");
+        var controllers = _frequencyOptions
+            .Where(o => !o.IsPlaceholder)
+            .Select(o => new ControllerFrequency(o.Role, o.FrequencyMhz))
+            .ToList();
+        UpdateNextControllerHint(_atcService.CurrentFlight, controllers);
+    }
+
+    private static string NormalizeRole(string role)
+    {
+        var trimmed = role.Trim().ToLowerInvariant();
+        return trimmed switch
+        {
+            "delivery" => "Clearance",
+            "clearance" => "Clearance",
+            "ground" => "Ground",
+            "tower" => "Tower",
+            "departure" => "Departure",
+            "approach" => "Approach",
+            "center" => "Center",
+            _ => CultureInfo.InvariantCulture.TextInfo.ToTitleCase(trimmed)
+        };
+    }
+
+    private static string NormalizeConnectedRole(string role)
+    {
+        var trimmed = role.Trim().ToLowerInvariant();
+        return trimmed switch
+        {
+            "delivery" => "clearance",
+            "clearance" => "clearance",
+            "ground" => "ground",
+            "tower" => "tower",
+            "departure" => "departure",
+            "approach" => "approach",
+            "center" => "center",
+            _ => trimmed
+        };
+    }
+
+    private static bool RolesMatch(string a, string b)
+    {
+        return string.Equals(NormalizeRole(a), NormalizeRole(b), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void UpdateNextControllerHint(FlightContext? context, IReadOnlyList<ControllerFrequency> controllers)
+    {
+        if (NextControllerHint == null)
+            return;
+
+        if (_pendingHandoffActive)
+        {
+            NextControllerHint.Text = string.Empty;
+            if (NextControllerSwitchButton != null)
+                NextControllerSwitchButton.Visibility = Visibility.Collapsed;
+            _suggestedController = null;
+            return;
+        }
+
+        if (context == null || controllers.Count == 0)
+        {
+            NextControllerHint.Text = string.Empty;
+            if (NextControllerSwitchButton != null)
+                NextControllerSwitchButton.Visibility = Visibility.Collapsed;
+            _suggestedController = null;
+            return;
+        }
+
+        bool isArrival = context.CurrentPhase >= FlightPhase.Descent_Arrival;
+        var available = controllers.Select(c => (c.Role, c.FrequencyMhz)).ToList();
+        var currentUnit = context.CurrentAtcUnit;
+        if (_selectedFrequency != null && !_selectedFrequency.IsPlaceholder)
+        {
+            currentUnit = ControllerFlowHelper.FromRoleLabel(_selectedFrequency.Role) ?? currentUnit;
+        }
+        var suggestion = ControllerFlowHelper.SuggestNextAvailable(currentUnit, isArrival, available);
+        if (suggestion == null)
+        {
+            NextControllerHint.Text = string.Empty;
+            if (NextControllerSwitchButton != null)
+                NextControllerSwitchButton.Visibility = Visibility.Collapsed;
+            _suggestedController = null;
+            return;
+        }
+
+        NextControllerHint.Text = $"Next suggested: {suggestion.Role} ({suggestion.FrequencyMhz:F3})";
+        if (NextControllerSwitchButton != null)
+            NextControllerSwitchButton.Visibility = Visibility.Visible;
+        _suggestedController = _frequencyOptions.FirstOrDefault(option =>
+            !option.IsPlaceholder &&
+            option.Role.Equals(suggestion.Role, StringComparison.OrdinalIgnoreCase) &&
+            Math.Abs(option.FrequencyMhz - suggestion.FrequencyMhz) < 0.005);
     }
 
     private static string CollapseWhitespace(string value)
@@ -682,6 +1001,13 @@ public partial class MainWindow : Window
             AddSystemMessage("[DEBUG] " + message);
     }
 
+    private void OnTtsNoticeReceived(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+            return;
+        Dispatcher.Invoke(() => AddSystemMessage(message));
+    }
+
     private ISttService CreateSttService()
     {
         LoadDotEnvIfPresent();
@@ -953,6 +1279,14 @@ public partial class MainWindow : Window
         SetTabSelection(isSettings: true);
     }
 
+    private void NextControllerSwitchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_suggestedController == null || _suggestedController.IsPlaceholder)
+            return;
+
+        SetSelectedFrequency(_suggestedController, updateComDisplay: true, userInitiated: true);
+    }
+
     private void SetTabSelection(bool isSettings)
     {
         SettingsHost.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
@@ -976,6 +1310,46 @@ public class ChatMessage
     public string Message { get; set; } = "";
     public Brush Background { get; set; } = Brushes.Transparent;
     public Brush MessageColor { get; set; } = Brushes.White;
+}
+
+public sealed class FrequencyOption
+{
+    public FrequencyOption(string role, double frequencyMhz)
+    {
+        Role = role;
+        FrequencyMhz = frequencyMhz;
+        Display = $"{role} ({frequencyMhz:F3})";
+    }
+
+    private FrequencyOption(string display)
+    {
+        Role = display;
+        FrequencyMhz = 0;
+        Display = display;
+        IsPlaceholder = true;
+    }
+
+    public string Role { get; }
+    public double FrequencyMhz { get; }
+    public string Display { get; }
+    public bool IsPlaceholder { get; }
+
+    public static FrequencyOption Placeholder(string display)
+    {
+        return new FrequencyOption(display);
+    }
+}
+
+public sealed class HandoffMatch
+{
+    public HandoffMatch(string role, double frequencyMhz)
+    {
+        Role = role;
+        FrequencyMhz = frequencyMhz;
+    }
+
+    public string Role { get; }
+    public double FrequencyMhz { get; }
 }
 
 public class AircraftTypeModel
