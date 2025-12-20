@@ -63,16 +63,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        MessageList.ItemsSource = Messages;
-        ConnectedToCombo.ItemsSource = _frequencyOptions;
-        ConnectedToCombo.DisplayMemberPath = nameof(FrequencyOption.Display);
-        SetFrequencyPlaceholder("Import SimBrief to load frequencies.");
-        
         _atcService = new AtcService();
         _atcService.OnAtcMessage += OnAtcMessageReceived;
         _atcService.OnFlightContextUpdated += OnFlightContextUpdated;
         _atcService.OnDebug += OnDebugReceived;
         _atcService.OnTtsNotice += OnTtsNoticeReceived;
+        MessageList.ItemsSource = Messages;
+        ConnectedToCombo.ItemsSource = _frequencyOptions;
+        ConnectedToCombo.DisplayMemberPath = nameof(FrequencyOption.Display);
+        SetFrequencyPlaceholder("Import SimBrief to load frequencies.");
 
         _sttDebugLog = msg =>
         {
