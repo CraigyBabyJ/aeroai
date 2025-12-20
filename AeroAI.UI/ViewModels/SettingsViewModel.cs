@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -13,7 +14,7 @@ using AeroAI.Audio;
 
 namespace AeroAI.UI.ViewModels;
 
-public sealed class SettingsViewModel : INotifyPropertyChanged
+public sealed class SettingsViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly AudioDeviceService _audioService;
     private readonly UserConfig _config;
@@ -21,9 +22,11 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     private readonly MicrophoneRecorder? _recorder;
     private bool _isTestingMic;
     private bool _isTestingAtc;
+    private static readonly HttpClient VoiceLabHttp = new();
     private readonly DispatcherTimer _voiceLabTimer;
-    private readonly HttpClient _voiceLabHttp = new();
+    private CancellationTokenSource? _voiceLabHealthCts;
     private bool _voiceLabHealthBusy;
+    private bool _isDisposed;
 
     public ObservableCollection<AudioDeviceOption> MicrophoneDevices { get; } = new();
     public ObservableCollection<AudioDeviceOption> OutputDevices { get; } = new();
@@ -360,7 +363,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     private async void RefreshVoiceLabHealthAsync()
     {
-        if (_voiceLabHealthBusy)
+        if (_voiceLabHealthBusy || _isDisposed)
             return;
 
         _voiceLabHealthBusy = true;
@@ -372,13 +375,16 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
                 return;
             }
 
+            _voiceLabHealthCts?.Cancel();
+            _voiceLabHealthCts?.Dispose();
+            _voiceLabHealthCts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+
             var probeConfig = new UserConfig
             {
                 Tts = new TtsConfig { VoiceLabBaseUrl = VoiceLabBaseUrl }
             };
-            var client = new VoiceLabTtsClient(_voiceLabHttp, probeConfig);
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            var health = await client.HealthAsync(cts.Token);
+            var client = new VoiceLabTtsClient(VoiceLabHttp, probeConfig);
+            var health = await client.HealthAsync(_voiceLabHealthCts.Token);
             VoiceLabHealthStatus = health.Online ? "Online" : "Offline";
         }
         catch
@@ -389,6 +395,17 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         {
             _voiceLabHealthBusy = false;
         }
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed)
+            return;
+
+        _isDisposed = true;
+        _voiceLabTimer.Stop();
+        _voiceLabHealthCts?.Cancel();
+        _voiceLabHealthCts?.Dispose();
     }
     
     private void OnPropertyChanged(string propertyName)

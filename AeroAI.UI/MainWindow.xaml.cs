@@ -1247,7 +1247,11 @@ public partial class MainWindow : Window
             var settingsVm = new SettingsViewModel(service, _config, ApplyAudioSelection, _recorder);
             var view = new Views.SettingsView { DataContext = settingsVm };
             if (SettingsHost != null)
+            {
+                if (SettingsHost.Content is UserControl existing && existing.DataContext is IDisposable disposable)
+                    disposable.Dispose();
                 SettingsHost.Content = view;
+            }
         }
         catch (Exception ex)
         {
