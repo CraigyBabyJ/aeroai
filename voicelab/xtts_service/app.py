@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
@@ -48,6 +49,10 @@ class TtsRequest(BaseModel):
     hard_pause_ms: Optional[int] = None
     pause_hard_ms: Optional[int] = None
     pause_soft_ms: Optional[int] = None
+    airport_icao: Optional[str] = None
+    region_prefix: Optional[str] = None
+    iso_country: Optional[str] = None
+    iso_region: Optional[str] = None
 
 
 class PrefetchRequest(BaseModel):
@@ -108,6 +113,101 @@ def _resolve_ref_wav(voice: Dict) -> Optional[Path]:
     return ref_wav
 
 
+def _normalize_role(role: Optional[str]) -> Optional[str]:
+    if not role:
+        return None
+    return str(role).strip().lower()
+
+
+def _voice_roles(voice: Dict) -> List[str]:
+    roles = voice.get("roles") or voice.get("role") or []
+    if isinstance(roles, str):
+        roles = [roles]
+    return [str(r).strip().lower() for r in roles if str(r).strip()]
+
+
+def _filter_by_role(voices_list: List[Dict], role: Optional[str]) -> List[Dict]:
+    if not role:
+        return voices_list
+    role = _normalize_role(role)
+    matches = [v for v in voices_list if role in _voice_roles(v)]
+    return matches or voices_list
+
+
+def _region_tokens(body: TtsRequest) -> List[str]:
+    tokens: List[str] = []
+    for value in (body.iso_country, body.iso_region, body.region_prefix):
+        if value:
+            tokens.append(str(value).strip())
+    if body.airport_icao and len(body.airport_icao) >= 2:
+        tokens.append(body.airport_icao[:2])
+    return [t for t in tokens if t]
+
+
+def _voice_matches_region(voice: Dict, tokens: List[str]) -> bool:
+    if not tokens:
+        return True
+    tags = voice.get("tags") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    region_codes = voice.get("region_codes") or []
+    if isinstance(region_codes, str):
+        region_codes = [region_codes]
+
+    name = str(voice.get("name") or "")
+    voice_id = str(voice.get("id") or "")
+    language = str(voice.get("language") or "")
+    text_blob = f"{voice_id} {name}".lower()
+    tags_norm = {str(t).lower() for t in tags}
+    region_norm = {str(r).lower() for r in region_codes}
+
+    for token in tokens:
+        token_norm = str(token).lower()
+        if token_norm in tags_norm or token_norm in region_norm:
+            return True
+        if token_norm and token_norm in text_blob:
+            return True
+        if language.lower().endswith(f"-{token_norm}"):
+            return True
+    return False
+
+
+def _filter_by_region(voices_list: List[Dict], tokens: List[str]) -> List[Dict]:
+    if not tokens:
+        return voices_list
+    matches = [v for v in voices_list if _voice_matches_region(v, tokens)]
+    return matches or voices_list
+
+
+def _stable_pick(voices_list: List[Dict], seed: str) -> Dict:
+    ordered = sorted(voices_list, key=lambda v: str(v.get("id") or ""))
+    if not ordered:
+        raise HTTPException(status_code=404, detail="No voices available.")
+    if not seed:
+        return ordered[0]
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    idx = int(digest, 16) % len(ordered)
+    return ordered[idx]
+
+
+def _resolve_voice_auto(body: TtsRequest) -> Dict:
+    all_voices = voices.list_voices()
+    if not all_voices:
+        raise HTTPException(status_code=404, detail="No voices available.")
+
+    role = _normalize_role(body.role)
+    candidates = _filter_by_role(all_voices, role)
+    tokens = _region_tokens(body)
+    candidates = _filter_by_region(candidates, tokens)
+
+    seed = ""
+    if body.airport_icao:
+        seed = f"{body.airport_icao.strip().upper()}|{role or ''}"
+    elif body.region_prefix:
+        seed = f"{body.region_prefix.strip().upper()}|{role or ''}"
+    return _stable_pick(candidates, seed)
+
+
 def _get_cache_mode() -> str:
     mode = (os.environ.get("TTS_CACHE_MODE") or "segment").strip().lower()
     return "full" if mode == "full" else "segment"
@@ -118,9 +218,12 @@ async def tts(body: TtsRequest):
     if body.format.lower() != "wav":
         raise HTTPException(status_code=400, detail="Only wav output is supported.")
 
-    voice = voices.get(body.voice_id)
-    if not voice:
-        raise HTTPException(status_code=404, detail="Voice not found.")
+    if body.voice_id.strip().lower() == "auto":
+        voice = _resolve_voice_auto(body)
+    else:
+        voice = voices.get(body.voice_id)
+        if not voice:
+            raise HTTPException(status_code=404, detail="Voice not found.")
 
     if body.radio_profile and not validate_radio_profile(body.radio_profile):
         raise HTTPException(status_code=400, detail="Unknown radio profile.")
@@ -134,6 +237,8 @@ async def tts(body: TtsRequest):
     normalized_atc, norm_changed = normalize_atc(body.text)
     ref_wav = _resolve_ref_wav(voice)
     voice_model_version = engine.model_version_for_voice(voice)
+    resolved_voice_id = str(voice.get("id") or body.voice_id)
+    resolved_engine = _voice_engine(voice)
 
     cache_mode = _get_cache_mode()
     if cache_mode == "full":
@@ -144,7 +249,7 @@ async def tts(body: TtsRequest):
         # Always cache a clean/dry render first so radio effects can reuse it.
         base_result = cache.get_or_generate(
             model_version=voice_model_version,
-            voice_id=body.voice_id,
+            voice_id=resolved_voice_id,
             role=body.role,
             radio_profile=None,
             speed=body.speed,
@@ -166,7 +271,7 @@ async def tts(body: TtsRequest):
             # Check if processed version exists; if not, derive from cached clean audio.
             processed = cache.get_or_generate(
                 model_version=f"{voice_model_version}|radio_dsp:{RADIO_DSP_VERSION}|ri:{radio_intensity:.2f}",
-                voice_id=body.voice_id,
+                voice_id=resolved_voice_id,
                 role=body.role,
                 radio_profile=body.radio_profile,
                 speed=body.speed,
@@ -185,6 +290,8 @@ async def tts(body: TtsRequest):
             "X-Cache-Mode": "full",
             "X-Cache": "HIT" if result.get("from_cache") else "MISS",
             "X-Cache-Key": result.get("key", ""),
+            "X-Resolved-Voice-Id": resolved_voice_id,
+            "X-Resolved-Engine": resolved_engine,
         }
         if norm_changed:
             headers["X-Normalized"] = "1"
@@ -210,7 +317,7 @@ async def tts(body: TtsRequest):
         segment_results.append(
             cache.get_or_generate(
                 model_version=voice_model_version,
-                voice_id=body.voice_id,
+                voice_id=resolved_voice_id,
                 role=body.role,
                 radio_profile=None,
                 speed=body.speed,
@@ -278,6 +385,8 @@ async def tts(body: TtsRequest):
         "X-Cache-Segments": str(total),
         "X-Cache-Hits": str(hits),
         "X-Segment-Delimiter": seg.delimiter,
+        "X-Resolved-Voice-Id": resolved_voice_id,
+        "X-Resolved-Engine": resolved_engine,
     }
     if norm_changed:
         headers["X-Normalized"] = "1"
