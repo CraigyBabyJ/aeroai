@@ -95,6 +95,7 @@ public partial class MainWindow : Window
         StateChanged += (_, _) => UpdateMaxRestoreIcon();
         UpdateMaxRestoreIcon();
         InitializeUserConfigAndAudio();
+        UpdateTestVoiceButtonState();
 
         if (!_sttService.IsAvailable)
         {
@@ -1286,15 +1287,29 @@ public partial class MainWindow : Window
 
     private async void TestVoiceButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_atcService.IsInitialized)
-        {
-            AddSystemMessage("Import a SimBrief flight plan to enable voice testing.");
-            return;
-        }
-
         try
         {
-            await _atcService.SpeakAtcAsync("Radio check | testing one two three");
+            var config = UserConfigStore.Load();
+            var voiceLabEnabled = config.Tts?.VoiceLabEnabled ?? true;
+            if (!voiceLabEnabled)
+            {
+                AddSystemMessage("VoiceLab is disabled in Settings.");
+                return;
+            }
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var health = await _atcService.GetVoiceLabHealthAsync(cts.Token);
+            if (!health.Online)
+            {
+                AddSystemMessage("VoiceLab is offline. Start the VoiceLab service and try again.");
+                return;
+            }
+
+            var ok = await _atcService.TestSpeakAsync("Radio check | testing one two three", cts.Token);
+            if (!ok)
+            {
+                AddSystemMessage("No TTS provider is available.");
+            }
         }
         catch (Exception ex)
         {
@@ -1310,6 +1325,16 @@ public partial class MainWindow : Window
         SetSelectedFrequency(_suggestedController, updateComDisplay: true, userInitiated: true);
     }
 
+    private void UpdateTestVoiceButtonState()
+    {
+        if (TestVoiceButton == null)
+            return;
+
+        var config = UserConfigStore.Load();
+        var voiceLabEnabled = config.Tts?.VoiceLabEnabled ?? true;
+        TestVoiceButton.IsEnabled = voiceLabEnabled;
+    }
+
     private void SetTabSelection(bool isSettings)
     {
         SettingsHost.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
@@ -1318,6 +1343,8 @@ public partial class MainWindow : Window
         MessagesPanel.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
         InputBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
         BottomButtonsBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
+        if (!isSettings)
+            UpdateTestVoiceButtonState();
 
         if (TabAtcButton != null && TabSettingsButton != null)
         {

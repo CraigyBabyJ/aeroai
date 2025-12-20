@@ -271,6 +271,36 @@ public class AtcService : IDisposable
         _connectedControllerFrequency = frequencyMhz;
     }
 
+    public async Task<TtsHealth> GetVoiceLabHealthAsync(CancellationToken ct = default)
+    {
+        var userConfig = UserConfigStore.Load();
+        var enabled = userConfig.Tts?.VoiceLabEnabled ?? true;
+        if (!enabled)
+            return new TtsHealth { Online = false, Detail = "Disabled" };
+
+        var client = new VoiceLabTtsClient(_httpClient, userConfig);
+        return await client.HealthAsync(ct);
+    }
+
+    public async Task<bool> TestSpeakAsync(string text, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        if (_voiceEngine == null || _voiceEngine is NullVoiceEngine)
+        {
+            var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
+            var userConfig = UserConfigStore.Load();
+            _voiceEngine = await CreateVoiceEngineAsync(voiceConfig, userConfig);
+        }
+
+        if (_voiceEngine is NullVoiceEngine)
+            return false;
+
+        await _voiceEngine.SpeakAsync(text, profile: null, cancellationToken: ct);
+        return true;
+    }
+
     private static AircraftPerformanceProfile BuildAircraftProfile(string? icaoType)
     {
         return new AircraftPerformanceProfile
