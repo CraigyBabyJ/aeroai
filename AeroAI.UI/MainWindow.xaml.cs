@@ -1295,6 +1295,11 @@ public partial class MainWindow : Window
                 AddSystemMessage("VoiceLab is disabled in Settings.");
                 return;
             }
+            if (!_atcService.HasAnyTtsProvider())
+            {
+                AddSystemMessage("No TTS provider is available.");
+                return;
+            }
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
             var health = await _atcService.GetVoiceLabHealthAsync(cts.Token);
@@ -1326,12 +1331,16 @@ public partial class MainWindow : Window
 
     private void UpdateTestVoiceButtonState()
     {
-        if (TestVoiceButton == null)
+        if (TestVoiceButton == null && TestVoiceButtonBottom == null)
             return;
 
         var config = UserConfigStore.Load();
         var voiceLabEnabled = config.Tts?.VoiceLabEnabled ?? true;
-        TestVoiceButton.IsEnabled = voiceLabEnabled;
+        var canTest = voiceLabEnabled && _atcService.HasAnyTtsProvider();
+        if (TestVoiceButton != null)
+            TestVoiceButton.IsEnabled = canTest;
+        if (TestVoiceButtonBottom != null)
+            TestVoiceButtonBottom.IsEnabled = canTest;
     }
 
     private void SetTabSelection(bool isSettings)

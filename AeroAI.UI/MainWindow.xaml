@@ -534,6 +534,11 @@
                         Click="ImportFlightPlan_Click"/>
                 <Button Content="Copy last ATC" Style="{StaticResource NavButton}" Margin="0,0,10,0"
                         Click="CopyLastAtc_Click"/>
+                <Button x:Name="TestVoiceButtonBottom"
+                        Content="Test Voice"
+                        Style="{StaticResource NavButton}"
+                        Margin="0,0,10,0"
+                        Click="TestVoiceButton_Click"/>
                 <CheckBox x:Name="DebugToggle" Content="Debug" VerticalAlignment="Center"
                           Foreground="{StaticResource TextPrimaryBrush}"
                           Checked="DebugToggle_Checked" Unchecked="DebugToggle_Unchecked"/>

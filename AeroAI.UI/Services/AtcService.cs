@@ -282,6 +282,17 @@ public class AtcService : IDisposable
         return await client.HealthAsync(ct);
     }
 
+    public bool HasAnyTtsProvider()
+    {
+        var userConfig = UserConfigStore.Load();
+        var voiceLabEnabled = userConfig.Tts?.VoiceLabEnabled ?? true;
+        if (voiceLabEnabled)
+            return true;
+
+        var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
+        return voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey);
+    }
+
     public async Task<bool> TestSpeakAsync(string text, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(text))
