@@ -1,5 +1,8 @@
 const voiceSelect = document.getElementById("voice-select");
+const voiceEngineFilter = document.getElementById("voice-engine-filter");
 const radioSelect = document.getElementById("radio-select");
+const radioIntensityInput = document.getElementById("radio-intensity");
+const radioIntensityDisplay = document.getElementById("radio-intensity-display");
 const phrasesetSelect = document.getElementById("phraseset-select");
 const textInput = document.getElementById("text-input");
 const roleSelect = document.getElementById("role-select");
@@ -25,6 +28,7 @@ const speedDisplay = document.getElementById("speed-display");
 const insertPipeBtn = document.getElementById("insert-pipe");
 const insertNewlineBtn = document.getElementById("insert-newline");
 const segmentPreview = document.getElementById("segment-preview");
+let voicesCache = [];
 
 const PUNCT_BREAKS = new Set([".", "?", "!", ";"]);
 
@@ -172,24 +176,60 @@ async function loadHealth() {
       engineText = "XTTS placeholder (libs available)";
     }
     document.getElementById("health-engine").innerText = engineText;
+
+    const coquiRow = document.getElementById("health-coqui");
+    if (coquiRow) {
+      const coquiText = engine.coqui_error
+        ? `Error: ${engine.coqui_error}`
+        : engine.coqui_ready
+        ? "Coqui ready"
+        : engine.coqui_available
+        ? "Coqui available"
+        : "Unavailable";
+      coquiRow.innerText = coquiText;
+    }
   } catch (err) {
     document.getElementById("health-model").innerText = "Error";
     document.getElementById("health-cuda").innerText = "-";
     document.getElementById("health-cache").innerText = "-";
     document.getElementById("health-engine").innerText = "Unavailable";
+    const coquiRow = document.getElementById("health-coqui");
+    if (coquiRow) coquiRow.innerText = "Unavailable";
+  }
+}
+
+function normalizeEngine(voice) {
+  return String(voice.engine || "xtts").toLowerCase();
+}
+
+function formatVoiceLabel(voice) {
+  const engine = normalizeEngine(voice);
+  const name = voice.name || voice.id;
+  return `${name} (${engine})`;
+}
+
+function renderVoiceOptions(filterEngine = "all") {
+  voiceSelect.innerHTML = "";
+  const filtered = voicesCache.filter((v) => filterEngine === "all" || normalizeEngine(v) === filterEngine);
+  filtered.forEach((voice) => {
+    const opt = document.createElement("option");
+    opt.value = voice.id;
+    opt.textContent = formatVoiceLabel(voice);
+    voiceSelect.appendChild(opt);
+  });
+  if (!filtered.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "No voices for this filter";
+    voiceSelect.appendChild(opt);
   }
 }
 
 async function loadVoices() {
   try {
     const data = await fetchJSON("/voices");
-    voiceSelect.innerHTML = "";
-    data.voices.forEach((voice) => {
-      const opt = document.createElement("option");
-      opt.value = voice.id;
-      opt.textContent = voice.name || voice.id;
-      voiceSelect.appendChild(opt);
-    });
+    voicesCache = (data.voices || []).map((v) => ({ ...v, engine: normalizeEngine(v) }));
+    renderVoiceOptions(voiceEngineFilter ? voiceEngineFilter.value : "all");
 
     const roles = data.roles && data.roles.length ? data.roles : ["delivery", "ground", "tower", "approach"];
     roleSelect.innerHTML = '<option value="">None</option>';
@@ -234,6 +274,11 @@ async function handleTts(event) {
     el.textContent = "";
   });
 
+  const hardPauseValue = parseInt(pauseHardInput.value || "", 10);
+  const softPauseValue = parseInt(pauseSoftInput.value || "", 10);
+  const hardPauseMs = Number.isFinite(hardPauseValue) ? hardPauseValue : 70;
+  const softPauseMs = Number.isFinite(softPauseValue) ? softPauseValue : 35;
+
   const payload = {
     text: textInput.value,
     voice_id: voiceSelect.value,
@@ -241,9 +286,18 @@ async function handleTts(event) {
     speed: parseFloat(speedInput.value || "1") || 1.0,
     radio_profile: radioSelect.value || null,
     format: "wav",
-    pause_hard_ms: parseInt(pauseHardInput.value || "0", 10) || null,
-    pause_soft_ms: parseInt(pauseSoftInput.value || "0", 10) || null,
+    hard_pause_ms: hardPauseMs,
+    soft_pause_ms: softPauseMs,
+    pause_hard_ms: hardPauseMs,
+    pause_soft_ms: softPauseMs,
+    hardPauseMs: hardPauseMs,
+    softPauseMs: softPauseMs,
   };
+  if (radioSelect.value) {
+    const intensityPercent = parseInt(radioIntensityInput.value || "50", 10);
+    const clampedPercent = Math.max(0, Math.min(100, Number.isFinite(intensityPercent) ? intensityPercent : 50));
+    payload.radio_intensity = clampedPercent / 100.0;
+  }
 
   try {
     const res = await fetch("/tts", {
@@ -366,6 +420,13 @@ clearCacheBtn.addEventListener("click", clearCache);
 speedInput.addEventListener("input", () => {
   speedDisplay.textContent = `${parseFloat(speedInput.value).toFixed(1)}x`;
 });
+if (radioIntensityInput && radioIntensityDisplay) {
+  radioIntensityInput.addEventListener("input", () => {
+    const pct = parseInt(radioIntensityInput.value || "50", 10);
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 50));
+    radioIntensityDisplay.textContent = `${clamped}%`;
+  });
+}
 textInput.addEventListener("input", updateSegmentPreview);
 if (insertPipeBtn) insertPipeBtn.addEventListener("click", () => insertAtCursor(textInput, " | "));
 if (insertNewlineBtn) insertNewlineBtn.addEventListener("click", () => insertAtCursor(textInput, "\n"));
@@ -375,5 +436,16 @@ window.addEventListener("DOMContentLoaded", async () => {
   textInput.value =
     "Easy one two three | radio check | wind two seven zero at one two knots";
   speedDisplay.textContent = `${parseFloat(speedInput.value).toFixed(1)}x`;
+  if (radioIntensityInput && radioIntensityDisplay) {
+    const pct = parseInt(radioIntensityInput.value || "50", 10);
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(pct) ? pct : 50));
+    radioIntensityDisplay.textContent = `${clamped}%`;
+  }
   updateSegmentPreview();
+
+  if (voiceEngineFilter) {
+    voiceEngineFilter.addEventListener("change", () => {
+      renderVoiceOptions(voiceEngineFilter.value);
+    });
+  }
 });

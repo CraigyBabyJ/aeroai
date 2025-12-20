@@ -91,3 +91,6 @@ voicelab/xtts_service/data/cache.db
 voicelab/**/outputs/
 voicelab/**/logs/
 voicelab/**/tmp*.wav
+voicelab/*.wav
+voicelab/**/ref.wav
+voicelab/xtts_service/tools/

@@ -8,11 +8,15 @@ from typing import List, Literal, Tuple
 DelimiterMode = Literal["pipe", "newline", "punct", "none"]
 
 
+BoundaryType = Literal["hard", "soft"]
+
+
 @dataclass(frozen=True)
 class SegmentationResult:
     segments: List[str]
     delimiter: DelimiterMode
     pauses_ms: List[int]
+    boundary_types: List[BoundaryType]
 
 
 _PUNCT_BREAKS = {".", "?", "!", ";"}
@@ -124,21 +128,34 @@ def segment_text(
         delimiter = "punct" if any(ch in raw for ch in _PUNCT_BREAKS) else "none"
         base = _split_punct(raw)
 
-    base_pause_default = 90 if delimiter in ("pipe", "newline") else 70
-    wrap_pause_default = 70
+    hard_pause_default = 70
+    soft_pause_default = 35
+    base_pause_default = hard_pause_default if delimiter in ("pipe", "newline") else soft_pause_default
+    wrap_pause_default = soft_pause_default
     base_pause = _clamp_pause(base_pause_ms, base_pause_default)
     wrap_pause = _clamp_pause(wrap_pause_ms, wrap_pause_default)
 
     segments: List[str] = []
     pauses_ms: List[int] = []
+    boundary_types: List[BoundaryType] = []
     for base_idx, base_seg in enumerate(base):
         subs = _split_long_segment(base_seg, max_len=220, min_len=160)
         for sub_idx, sub in enumerate(subs):
             if segments:
-                pauses_ms.append(wrap_pause if sub_idx > 0 else base_pause)
+                if sub_idx > 0:
+                    boundary = "soft"
+                else:
+                    boundary = "hard" if delimiter in ("pipe", "newline") else "soft"
+                boundary_types.append(boundary)
+                pauses_ms.append(base_pause if boundary == "hard" else wrap_pause)
             segments.append(sub)
 
-    return SegmentationResult(segments=segments, delimiter=delimiter, pauses_ms=pauses_ms)
+    return SegmentationResult(
+        segments=segments,
+        delimiter=delimiter,
+        pauses_ms=pauses_ms,
+        boundary_types=boundary_types,
+    )
 
 
 def split_segments(text: str) -> list[str]:

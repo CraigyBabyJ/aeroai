@@ -31,6 +31,10 @@
           <span>Engine</span>
           <strong id="health-engine">...</strong>
         </div>
+        <div class="health-row">
+          <span>Coqui</span>
+          <strong id="health-coqui">...</strong>
+        </div>
       </div>
     </header>
 
@@ -47,6 +51,14 @@
       </div>
       <form id="tts-form" class="form-grid">
         <label>
+          <span>Engine filter</span>
+          <select id="voice-engine-filter">
+            <option value="all">All</option>
+            <option value="xtts">xtts</option>
+            <option value="coqui_vits">coqui_vits</option>
+          </select>
+        </label>
+        <label>
           <span>Voice</span>
           <select id="voice-select" required></select>
         </label>
@@ -61,6 +73,13 @@
           </select>
         </label>
         <label>
+          <span>Radio intensity</span>
+          <div class="slider">
+            <input id="radio-intensity" type="range" min="0" max="100" step="1" value="50">
+            <span id="radio-intensity-display">50%</span>
+          </div>
+        </label>
+        <label>
           <span>Speed</span>
           <div class="slider">
             <input id="speed-input" type="range" min="0.5" max="1.5" step="0.1" value="1.0">
@@ -69,11 +88,11 @@
         </label>
         <label>
           <span>Hard pause (ms)</span>
-          <input id="pause-hard" type="number" min="0" max="1000" step="10" value="90">
+          <input id="pause-hard" type="number" min="0" max="1000" step="1" value="70">
         </label>
         <label>
           <span>Soft pause (ms)</span>
-          <input id="pause-soft" type="number" min="0" max="1000" step="10" value="70">
+          <input id="pause-soft" type="number" min="0" max="1000" step="1" value="35">
         </label>
         <label class="full">
           <span>Text</span>

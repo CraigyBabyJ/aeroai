@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
@@ -14,7 +14,9 @@ from .phrasepacks import PhrasePacks
 from .radio import RADIO_DSP_VERSION, apply_radio_profile, list_radio_profiles, validate_radio_profile
 from .segmentation import segment_text
 from .tts_engine import TtsEngine
-from .audio_utils import stitch_wavs, adjust_speed
+from .audio_utils import adjust_speed, wav_to_pcm16_mono
+from .audio_edit import stitch_wavs, trim_silence_pcm16
+from .normalize_atc import normalize_atc
 from .voices import VoiceStore
 
 
@@ -25,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent
 UI_DIR = BASE_DIR / "ui"
 
 engine = TtsEngine(BASE_DIR)
-cache = TtsCache(base_dir=BASE_DIR, model_version=engine.model_version)
+cache = TtsCache(base_dir=BASE_DIR, model_version="voicelab-multi")
 voices = VoiceStore(base_dir=BASE_DIR)
 phrasepacks = PhrasePacks()
 
@@ -40,7 +42,10 @@ class TtsRequest(BaseModel):
     language: str = "en"
     speed: float = 1.0
     radio_profile: Optional[str] = None
+    radio_intensity: Optional[float] = None
     format: str = "wav"
+    soft_pause_ms: Optional[int] = None
+    hard_pause_ms: Optional[int] = None
     pause_hard_ms: Optional[int] = None
     pause_soft_ms: Optional[int] = None
 
@@ -86,7 +91,14 @@ async def get_voices():
     }
 
 
-def _resolve_ref_wav(voice_id: str) -> Path:
+def _voice_engine(voice: Dict) -> str:
+    return str(voice.get("engine") or "xtts").lower()
+
+
+def _resolve_ref_wav(voice: Dict) -> Optional[Path]:
+    if _voice_engine(voice) == "coqui_vits":
+        return None
+    voice_id = voice.get("id") or ""
     ref_wav = voices.get_ref_wav_path(voice_id)
     if not ref_wav:
         raise HTTPException(
@@ -113,25 +125,34 @@ async def tts(body: TtsRequest):
     if body.radio_profile and not validate_radio_profile(body.radio_profile):
         raise HTTPException(status_code=400, detail="Unknown radio profile.")
 
-    ref_wav = _resolve_ref_wav(body.voice_id)
+    try:
+        radio_intensity = 0.5 if body.radio_intensity is None else float(body.radio_intensity)
+    except Exception:
+        radio_intensity = 0.5
+    radio_intensity = max(0.0, min(1.0, radio_intensity))
+
+    normalized_atc, norm_changed = normalize_atc(body.text)
+    ref_wav = _resolve_ref_wav(voice)
+    voice_model_version = engine.model_version_for_voice(voice)
 
     cache_mode = _get_cache_mode()
     if cache_mode == "full":
-        text_norm = cache.normalize(body.text)
+        text_norm = cache.normalize(normalized_atc)
         if not text_norm:
             raise HTTPException(status_code=400, detail="Text is empty after normalization.")
 
         # Always cache a clean/dry render first so radio effects can reuse it.
         base_result = cache.get_or_generate(
-            model_version=engine.model_version,
+            model_version=voice_model_version,
             voice_id=body.voice_id,
             role=body.role,
             radio_profile=None,
             speed=body.speed,
             language=body.language,
             text=text_norm,
-            generator=lambda: engine.synthesize(
+            generator=lambda: engine.synthesize_for_voice(
                 text=text_norm,
+                voice=voice,
                 speaker_wav=ref_wav,
                 language=body.language,
                 speed=body.speed,
@@ -144,7 +165,7 @@ async def tts(body: TtsRequest):
         else:
             # Check if processed version exists; if not, derive from cached clean audio.
             processed = cache.get_or_generate(
-                model_version=f"{engine.model_version}|radio_dsp:{RADIO_DSP_VERSION}",
+                model_version=f"{voice_model_version}|radio_dsp:{RADIO_DSP_VERSION}|ri:{radio_intensity:.2f}",
                 voice_id=body.voice_id,
                 role=body.role,
                 radio_profile=body.radio_profile,
@@ -154,6 +175,7 @@ async def tts(body: TtsRequest):
                 generator=lambda: apply_radio_profile(
                     base_result["audio"],
                     profile=body.radio_profile or "clean",
+                    radio_intensity=radio_intensity,
                 ),
                 return_audio=True,
             )
@@ -164,12 +186,21 @@ async def tts(body: TtsRequest):
             "X-Cache": "HIT" if result.get("from_cache") else "MISS",
             "X-Cache-Key": result.get("key", ""),
         }
+        if norm_changed:
+            headers["X-Normalized"] = "1"
         return Response(content=result["audio"], media_type="audio/wav", headers=headers)
 
+    hard_pause = body.hard_pause_ms if body.hard_pause_ms is not None else body.pause_hard_ms
+    soft_pause = body.soft_pause_ms if body.soft_pause_ms is not None else body.pause_soft_ms
+    if hard_pause is None:
+        hard_pause = 70
+    if soft_pause is None:
+        soft_pause = 35
+
     seg = segment_text(
-        body.text,
-        base_pause_ms=body.pause_hard_ms,
-        wrap_pause_ms=body.pause_soft_ms,
+        normalized_atc,
+        base_pause_ms=hard_pause,
+        wrap_pause_ms=soft_pause,
     )
     if not seg.segments:
         raise HTTPException(status_code=400, detail="Text is empty after segmentation.")
@@ -178,15 +209,16 @@ async def tts(body: TtsRequest):
     for segment in seg.segments:
         segment_results.append(
             cache.get_or_generate(
-                model_version=engine.model_version,
+                model_version=voice_model_version,
                 voice_id=body.voice_id,
                 role=body.role,
                 radio_profile=None,
                 speed=body.speed,
                 language=body.language,
                 text=segment,
-                generator=lambda s=segment: engine.synthesize(
+                generator=lambda s=segment: engine.synthesize_for_voice(
                     text=s,
+                    voice=voice,
                     speaker_wav=ref_wav,
                     language=body.language,
                     speed=body.speed,
@@ -195,22 +227,41 @@ async def tts(body: TtsRequest):
             )
         )
 
+    pauses_ms = [hard_pause if boundary == "hard" else soft_pause for boundary in seg.boundary_types]
+    _, sample_rate = wav_to_pcm16_mono(segment_results[0]["audio"], target_sample_rate=None)
+    trimmed_wavs = []
+    for result in segment_results:
+        try:
+            trimmed_wavs.append(trim_silence_pcm16(result["audio"], sample_rate))
+        except Exception:
+            trimmed_wavs.append(result["audio"])
+
     stitched_clean = stitch_wavs(
-        [r["audio"] for r in segment_results],
-        pause_ms=seg.pauses_ms,
+        trimmed_wavs,
+        sample_rate=sample_rate,
+        pauses_ms=pauses_ms,
+        crossfade_ms=15,
     )
 
     processed = stitched_clean
+    native_speed = engine.native_speed_supported_for_voice(voice)
     if abs(body.speed - 1.0) > 1e-3:
-        try:
-            processed = adjust_speed(processed, speed=body.speed)
-        except Exception:
-            processed = stitched_clean
+        if native_speed is False:
+            try:
+                processed = adjust_speed(processed, speed=body.speed)
+            except Exception:
+                processed = stitched_clean
+        elif native_speed is None:
+            # Unknown support: err on side of not double-applying; fallback only on failure.
+            try:
+                processed = adjust_speed(processed, speed=body.speed)
+            except Exception:
+                processed = stitched_clean
 
     if not body.radio_profile or body.radio_profile == "clean":
         final_wav = processed
     else:
-        final_wav = apply_radio_profile(processed, profile=body.radio_profile)
+        final_wav = apply_radio_profile(processed, profile=body.radio_profile, radio_intensity=radio_intensity)
 
     hits = sum(1 for r in segment_results if r.get("from_cache"))
     total = len(segment_results)
@@ -228,6 +279,8 @@ async def tts(body: TtsRequest):
         "X-Cache-Hits": str(hits),
         "X-Segment-Delimiter": seg.delimiter,
     }
+    if norm_changed:
+        headers["X-Normalized"] = "1"
     return Response(content=final_wav, media_type="audio/wav", headers=headers)
 
 
@@ -244,22 +297,25 @@ async def prefetch(body: PrefetchRequest):
     if not phrases:
         raise HTTPException(status_code=404, detail="Phrase set not found or empty.")
 
+    voice_model_version = engine.model_version_for_voice(voice)
     items = []
     for phrase in phrases:
-        normalized = cache.normalize(phrase)
-        ref_wav = _resolve_ref_wav(body.voice_id)
+        normalized_atc, _ = normalize_atc(phrase)
+        normalized = cache.normalize(normalized_atc)
+        ref_wav = _resolve_ref_wav(voice)
 
         # Prefetch caches clean audio only (no stitching, no radio).
         result = cache.get_or_generate(
-            model_version=engine.model_version,
+            model_version=voice_model_version,
             voice_id=body.voice_id,
             role=body.role,
             radio_profile=None,
             speed=body.speed,
             language=body.language,
             text=normalized,
-            generator=lambda p=normalized: engine.synthesize(
+            generator=lambda p=normalized: engine.synthesize_for_voice(
                 text=p,
+                voice=voice,
                 speaker_wav=ref_wav,
                 language=body.language,
                 speed=body.speed,

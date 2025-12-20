@@ -1,0 +1,8 @@
+{
+  "id": "coqui_p233",
+  "name": "Coqui VCTK p233",
+  "engine": "coqui_vits",
+  "model": "tts_models/en/vctk/vits",
+  "speaker_id": "p233",
+  "tags": ["coqui", "vctk"]
+}

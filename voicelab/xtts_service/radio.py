@@ -29,12 +29,20 @@ def validate_radio_profile(name: str) -> bool:
     return name in RADIO_PROFILES
 
 
+def _clamp_i16(x: float) -> int:
+    if x > 32767:
+        return 32767
+    if x < -32768:
+        return -32768
+    return int(x)
+
+
 def _one_pole_lowpass(samples: array, alpha: float) -> array:
     out = array("h")
     y_prev = 0.0
     for x in samples:
         y_prev = y_prev + alpha * (x - y_prev)
-        out.append(int(y_prev))
+        out.append(_clamp_i16(y_prev))
     return out
 
 
@@ -45,7 +53,7 @@ def _one_pole_highpass(samples: array, alpha: float) -> array:
     for x in samples:
         y_prev = alpha * (y_prev + x - x_prev)
         x_prev = x
-        out.append(int(y_prev))
+        out.append(_clamp_i16(y_prev))
     return out
 
 
@@ -57,7 +65,7 @@ def _fade_tail(samples: array, sample_rate: int, tail_seconds: float = 0.08) -> 
     start = len(samples) - count
     for i in range(count):
         factor = max(0.0, 1.0 - (i / count))
-        out[start + i] = int(out[start + i] * factor)
+        out[start + i] = _clamp_i16(out[start + i] * factor)
     return out
 
 
@@ -67,7 +75,7 @@ def _add_noise(samples: array, level: float = 0.01) -> array:
     out = array("h")
     for x in samples:
         noise = random.uniform(-1.0, 1.0) * 32767 * level
-        out.append(int(max(min(x + noise, 32767), -32768)))
+        out.append(_clamp_i16(x + noise))
     return out
 
 
@@ -83,7 +91,7 @@ def _add_static_bursts(samples: array, level: float, probability: float, burst_l
             for j in range(blen):
                 noise = random.uniform(-1.0, 1.0) * 32767 * level
                 idx = i + j
-                out[idx] = int(max(min(out[idx] + noise, 32767), -32768))
+                out[idx] = _clamp_i16(out[idx] + noise)
             i += blen
         else:
             i += 1
@@ -117,8 +125,8 @@ def _am_wobble(samples: array, sample_rate: int, depth: float, rate_hz: float) -
     for idx, x in enumerate(samples):
         t = idx / float(sample_rate)
         mod = 1.0 - depth * (0.5 - 0.5 * math.cos(two_pi_f * t))
-        y = int(x * mod)
-        out.append(int(max(min(y, 32767), -32768)))
+        y = x * mod
+        out.append(_clamp_i16(y))
     return out
 
 
@@ -128,7 +136,7 @@ def _bitcrush(samples: array, drop_bits: int = 2) -> array:
     out = array("h")
     mask = ~((1 << drop_bits) - 1)
     for x in samples:
-        out.append(int(x) & mask)
+        out.append(_clamp_i16(int(x) & mask))
     return out
 
 
@@ -136,7 +144,7 @@ def _soft_clip(samples: array, drive: float = 1.0) -> array:
     out = array("h")
     for x in samples:
         y = math.tanh(drive * (x / 32767.0)) * 32767.0
-        out.append(int(max(min(y, 32767), -32768)))
+        out.append(_clamp_i16(y))
     return out
 
 
@@ -146,7 +154,7 @@ def _mix(dry: array, wet: array, wet_mix: float) -> array:
     out = array("h")
     for a, b in zip(dry, wet):
         y = a * dry_mix + b * wet_mix
-        out.append(int(max(min(y, 32767), -32768)))
+        out.append(_clamp_i16(y))
     return out
 
 
@@ -159,15 +167,20 @@ def _normalize_peak(samples: array, target: float = 0.9) -> array:
     scale = (target * 32767.0) / peak
     out = array("h")
     for x in samples:
-        y = int(x * scale)
-        out.append(int(max(min(y, 32767), -32768)))
+        y = x * scale
+        out.append(_clamp_i16(y))
     return out
 
 
-def apply_radio_profile(audio_wav: bytes, profile: str) -> bytes:
+def apply_radio_profile(audio_wav: bytes, profile: str, *, radio_intensity: float = 0.5) -> bytes:
     """Apply a lightweight radio flavor. Falls back to passthrough on error."""
     if not profile or profile == "clean" or profile not in RADIO_PROFILES:
         return audio_wav
+    try:
+        radio_intensity = float(radio_intensity)
+    except Exception:
+        radio_intensity = 0.5
+    radio_intensity = max(0.0, min(1.0, radio_intensity))
     try:
         with wave.open(io.BytesIO(audio_wav), "rb") as wav_in:
             params = wav_in.getparams()
@@ -264,44 +277,69 @@ def apply_radio_profile(audio_wav: bytes, profile: str) -> bytes:
     }
     p = presets.get(profile, presets["vhf"])
 
+    if radio_intensity <= 0.0:
+        processed = _fade_tail(samples, sr, tail_seconds=p["tail"])
+        buf = io.BytesIO()
+        try:
+            with wave.open(buf, "wb") as wav_out:
+                wav_out.setnchannels(1)
+                wav_out.setsampwidth(2)
+                wav_out.setframerate(sr)
+                wav_out.writeframes(processed.tobytes())
+            return buf.getvalue()
+        except Exception:
+            return audio_wav
+
+    hiss = float(p["hiss"]) * radio_intensity
+    burst_level = float(p["burst_level"]) * radio_intensity
+    burst_rate = float(p["bursts_per_s"]) * radio_intensity
+    drop_prob = float(p.get("drop_prob", 0.0) or 0.0) * radio_intensity
+    wobble_depth = float(p.get("wobble_depth", 0.0) or 0.0) * radio_intensity
+    wobble_hz = float(p.get("wobble_hz", 0.0) or 0.0)
+    drive = 1.0 + (float(p["drive"]) - 1.0) * radio_intensity
+    wet_mix = float(p["wet"]) * radio_intensity
+    gain = 1.0 + (float(p["gain"]) - 1.0) * radio_intensity
+    crush = int(round(float(p["crush"]) * radio_intensity))
+
     # Simple bandpass: high-pass then low-pass using single-pole filters.
     # Cutoffs tuned for radio-ish band (roughly 280-3200 Hz).
     dt = 1.0 / sr
-    hp_rc = 1.0 / (2 * 3.14159 * p["hp"])
-    lp_rc = 1.0 / (2 * 3.14159 * p["lp"])
+    full_lp = max(1000.0, float(sr) * 0.49)
+    hp = float(p["hp"]) * radio_intensity
+    lp = full_lp + (float(p["lp"]) - full_lp) * radio_intensity
+    hp_rc = 1.0 / (2 * 3.14159 * max(1.0, hp))
+    lp_rc = 1.0 / (2 * 3.14159 * max(1.0, lp))
     hp_alpha = hp_rc / (hp_rc + dt)
     lp_alpha = dt / (lp_rc + dt)
 
     band = _one_pole_highpass(samples, hp_alpha)
     band = _one_pole_lowpass(band, lp_alpha)
+    band = _mix(samples, band, wet_mix=radio_intensity)
 
-    wet = _bitcrush(band, drop_bits=p["crush"])
-    wet = _soft_clip(wet, drive=p["drive"])
-    wet = _add_noise(wet, level=p["hiss"])
-    burst_prob = float(p["bursts_per_s"]) / float(sr)
+    wet = _bitcrush(band, drop_bits=crush)
+    wet = _soft_clip(wet, drive=drive)
+    wet = _add_noise(wet, level=hiss)
+    burst_prob = burst_rate / float(sr)
     burst_len = max(1, int(float(sr) * float(p["burst_len_s"])))
-    wet = _add_static_bursts(wet, level=p["burst_level"], probability=burst_prob, burst_len=burst_len)
+    wet = _add_static_bursts(wet, level=burst_level, probability=burst_prob, burst_len=burst_len)
 
-    processed = _mix(band, wet, wet_mix=p["wet"])
+    processed = _mix(band, wet, wet_mix=wet_mix)
 
-    drop_prob = float(p.get("drop_prob", 0.0) or 0.0)
     drop_len_s = float(p.get("drop_len_s", 0.0) or 0.0)
     if drop_prob > 0 and drop_len_s > 0:
         max_drop = max(1, int(float(sr) * drop_len_s))
         processed = _apply_dropouts(processed, probability=drop_prob, max_len=max_drop)
 
-    if p["gain"] != 1.0:
+    if gain != 1.0:
         gained = array("h")
         for x in processed:
-            y = int(x * float(p["gain"]))
-            gained.append(int(max(min(y, 32767), -32768)))
+            y = x * gain
+            gained.append(_clamp_i16(y))
         processed = gained
 
     processed = _normalize_peak(processed, target=0.92)
     processed = _fade_tail(processed, sr, tail_seconds=p["tail"])
 
-    wobble_hz = float(p.get("wobble_hz", 0.0) or 0.0)
-    wobble_depth = float(p.get("wobble_depth", 0.0) or 0.0)
     if wobble_hz > 0 and wobble_depth > 0:
         processed = _am_wobble(processed, sample_rate=sr, depth=wobble_depth, rate_hz=wobble_hz)
 
