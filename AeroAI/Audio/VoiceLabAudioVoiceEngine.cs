@@ -73,18 +73,58 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
             var audioBytes = RadioEffectProcessor.ApplyToWavResponse(result.WavBytes, unit);
             await TtsPlayback.PlayWavBytesAsync(audioBytes, cancellationToken);
         }
+        catch (Exception ex) when (ShouldRetryWithAuto(ex) && !string.Equals(voiceId, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            var fallbackRequest = new TtsRequest
+            {
+                Text = text,
+                VoiceId = "auto",
+                Role = role,
+                Language = "en",
+                Speed = speed,
+                Format = "wav",
+                AirportIcao = flight?.OriginIcao,
+                RegionPrefix = hints.RegionPrefix,
+                IsoCountry = hints.IsoCountry,
+                IsoRegion = hints.IsoRegion
+            };
+
+            try
+            {
+                var result = await _client.SynthesizeAsync(fallbackRequest, cancellationToken);
+                var unit = MapControllerTypeToUnit(profile);
+                var audioBytes = RadioEffectProcessor.ApplyToWavResponse(result.WavBytes, unit);
+                await TtsPlayback.PlayWavBytesAsync(audioBytes, cancellationToken);
+            }
+            catch (Exception inner)
+            {
+                await HandleFailureAsync(text, profile, cancellationToken, inner);
+            }
+        }
         catch (Exception ex)
         {
-            if (_fallback != null)
-            {
-                _onStatus?.Invoke("VoiceLab unavailable. Falling back to OpenAI TTS.");
-                await _fallback.SpeakAsync(text, profile, cancellationToken);
-                return;
-            }
-
-            _onStatus?.Invoke("VoiceLab unavailable. Audio skipped.");
-            Console.WriteLine($"[VoiceLab] TTS error: {ex.Message}");
+            await HandleFailureAsync(text, profile, cancellationToken, ex);
         }
+    }
+
+    private static bool ShouldRetryWithAuto(Exception ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        return message.Contains("Voice not found", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("404", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task HandleFailureAsync(string text, VoiceProfile? profile, CancellationToken cancellationToken, Exception ex)
+    {
+        if (_fallback != null)
+        {
+            _onStatus?.Invoke("VoiceLab unavailable. Falling back to OpenAI TTS.");
+            await _fallback.SpeakAsync(text, profile, cancellationToken);
+            return;
+        }
+
+        _onStatus?.Invoke("VoiceLab unavailable. Audio skipped.");
+        Console.WriteLine($"[VoiceLab] TTS error: {ex.Message}");
     }
 
     private static string? ResolveRole(VoiceProfile? profile)
