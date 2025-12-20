@@ -19,6 +19,7 @@
   <ItemGroup>
     <Compile Remove="AeroAI.UI\**\*" />
     <None Remove="AeroAI.UI\**\*" />
+    <Compile Remove="AeroAI\**\*Tests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Data\airports.json" CopyToOutputDirectory="PreserveNewest" />

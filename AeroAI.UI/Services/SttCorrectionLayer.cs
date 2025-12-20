@@ -6,13 +6,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using System.Threading;
+using AeroAI.Services;
 
 namespace AeroAI.UI.Services;
-
-public interface ISttCorrectionLayer
-{
-    string Apply(string transcript);
-}
 
 /// <summary>
 /// Applies deterministic, configurable text corrections to Whisper STT transcripts.
