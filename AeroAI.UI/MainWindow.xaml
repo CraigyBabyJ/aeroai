@@ -306,6 +306,13 @@
                                     Click="NextControllerSwitchButton_Click"
                                     Visibility="Collapsed"/>
                         </StackPanel>
+                        <Button x:Name="TestVoiceButton"
+                                Content="Test Voice"
+                                Style="{DynamicResource NavButton}"
+                                Padding="8,4"
+                                Margin="0,6,0,0"
+                                FontSize="11"
+                                Click="TestVoiceButton_Click"/>
                     </StackPanel>
                 </Border>
             </StackPanel>

@@ -1284,6 +1284,24 @@ public partial class MainWindow : Window
         SetTabSelection(isSettings: true);
     }
 
+    private async void TestVoiceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_atcService.IsInitialized)
+        {
+            AddSystemMessage("Import a SimBrief flight plan to enable voice testing.");
+            return;
+        }
+
+        try
+        {
+            await _atcService.SpeakAtcAsync("Radio check | testing one two three");
+        }
+        catch (Exception ex)
+        {
+            AddSystemMessage($"Test voice failed: {ex.Message}");
+        }
+    }
+
     private void NextControllerSwitchButton_Click(object sender, RoutedEventArgs e)
     {
         if (_suggestedController == null || _suggestedController.IsPlaceholder)
