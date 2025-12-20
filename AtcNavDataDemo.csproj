@@ -21,6 +21,7 @@
     <None Remove="AeroAI.UI\**\*" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Data\airports.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Data\airport-frequencies.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Data\airlines.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Data\aircraft_type.json" CopyToOutputDirectory="PreserveNewest" />

@@ -4,6 +4,7 @@ using System.IO;
 using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using AeroAI.Atc;
 using AeroAI.Audio;
@@ -26,14 +27,19 @@ public class AtcService : IDisposable
     private VoiceProfileManager? _voiceProfileManager;
     private string? _voiceOverride;
     private readonly HttpClient _httpClient;
+    private string? _connectedControllerRole;
+    private double? _connectedControllerFrequency;
 
     public event Action<string, string>? OnAtcMessage;
     public event Action<FlightContext>? OnFlightContextUpdated;
     public event Action<string>? OnDebug;
+    public event Action<string>? OnTtsNotice;
 
     public FlightContext? CurrentFlight => _flightContext;
     public bool IsInitialized => _flightContext != null && _llmSession != null;
     public bool HasPendingConfirmation => _llmSession?.HasPendingConfirmation ?? false;
+    public string? ConnectedControllerRole => _connectedControllerRole;
+    public double? ConnectedControllerFrequency => _connectedControllerFrequency;
 
     public AtcService()
     {
@@ -184,15 +190,10 @@ public class AtcService : IDisposable
         _flightContext.CurrentFrequency = routing.FrequencyMhz?.ToString("F3");
 
         var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
+        var userConfig = UserConfigStore.Load();
         var voiceProfiles = VoiceProfileLoader.LoadProfiles();
         _voiceProfileManager = new VoiceProfileManager(voiceConfig, voiceProfiles);
-        _voiceEngine = voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey)
-            ? new OpenAiAudioVoiceEngine(voiceConfig, _httpClient)
-            : new NullVoiceEngine();
-        if (_voiceEngine is NullVoiceEngine)
-        {
-            OnDebug?.Invoke("TTS disabled (no API key or AEROAI_TTS_ENABLED not true).");
-        }
+        _voiceEngine = await CreateVoiceEngineAsync(voiceConfig, userConfig);
         _voiceOverride = Environment.GetEnvironmentVariable("AEROAI_VOICE_PROFILE");
 
         var llmClient = new OpenAiLlmClient(
@@ -207,6 +208,67 @@ public class AtcService : IDisposable
         PilotTransmissionNormalizer.Initialize(sttCorrectionLayer);
 
         OnFlightContextUpdated?.Invoke(_flightContext);
+    }
+
+    private async Task<IAtcVoiceEngine> CreateVoiceEngineAsync(VoiceConfig voiceConfig, UserConfig userConfig)
+    {
+        var voiceLabEnabled = userConfig.Tts?.VoiceLabEnabled ?? true;
+        var voiceLabClient = new VoiceLabTtsClient(_httpClient, userConfig);
+        var openAiFallback = voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey)
+            ? new OpenAiAudioVoiceEngine(voiceConfig, _httpClient)
+            : null;
+        var voiceLab = new VoiceLabAudioVoiceEngine(
+            voiceLabClient,
+            () => _flightContext,
+            () => _connectedControllerRole,
+            openAiFallback,
+            msg => OnTtsNotice?.Invoke(msg));
+        bool voiceLabReady = false;
+        if (voiceLabEnabled)
+        {
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                voiceLabReady = (await voiceLabClient.HealthAsync(cts.Token)).Online;
+            }
+            catch
+            {
+                voiceLabReady = false;
+            }
+        }
+
+        if (voiceLabReady)
+        {
+            OnDebug?.Invoke("VoiceLab TTS connected (primary).");
+            return voiceLab;
+        }
+
+        if (!voiceLabEnabled)
+        {
+            OnDebug?.Invoke("VoiceLab disabled in settings.");
+        }
+
+        if (openAiFallback != null)
+        {
+            OnDebug?.Invoke("VoiceLab unavailable. Falling back to OpenAI TTS.");
+            return openAiFallback;
+        }
+
+        OnDebug?.Invoke("TTS disabled (VoiceLab unavailable and no OpenAI API key).");
+        return new NullVoiceEngine();
+    }
+
+    public void UpdateConnectedController(string? role, double? frequencyMhz)
+    {
+        if (string.IsNullOrWhiteSpace(role) || frequencyMhz == null || frequencyMhz <= 0)
+        {
+            _connectedControllerRole = null;
+            _connectedControllerFrequency = null;
+            return;
+        }
+
+        _connectedControllerRole = role.Trim().ToLowerInvariant();
+        _connectedControllerFrequency = frequencyMhz;
     }
 
     private static AircraftPerformanceProfile BuildAircraftProfile(string? icaoType)

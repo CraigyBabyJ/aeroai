@@ -38,6 +38,7 @@
   <!-- Copy data files -->
   <ItemGroup>
     <None Include="..\Data\airport-frequencies.json" Link="Data\airport-frequencies.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Data\airports.json" Link="Data\airports.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Data\airlines.json" Link="Data\airlines.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Config\audio-effects.json" Link="Config\audio-effects.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Config\stt_corrections.json" Link="Config\stt_corrections.json" CopyToOutputDirectory="PreserveNewest" />

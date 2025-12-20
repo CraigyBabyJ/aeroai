@@ -10,6 +10,7 @@ public sealed class UserConfig
 {
     public string SimBriefUsername { get; set; } = string.Empty;
     public AudioConfig Audio { get; set; } = new();
+    public TtsConfig Tts { get; set; } = new();
 }
 
 public sealed class AudioConfig
@@ -31,6 +32,12 @@ public sealed class AudioConfig
     /// ATC audio volume as percentage (0-100). Default: 100.
     /// </summary>
     public int AtcVolumePercent { get; set; } = 100;
+}
+
+public sealed class TtsConfig
+{
+    public bool VoiceLabEnabled { get; set; } = true;
+    public string VoiceLabBaseUrl { get; set; } = "http://127.0.0.1:8008";
 }
 
 public static class UserConfigStore
@@ -60,6 +67,8 @@ public static class UserConfigStore
             }
             if (config.Audio == null)
                 config.Audio = new AudioConfig();
+            if (config.Tts == null)
+                config.Tts = new TtsConfig();
             return config;
         }
         catch
