@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse
@@ -18,6 +20,7 @@ from .tts_engine import TtsEngine
 from .audio_utils import adjust_speed, wav_to_pcm16_mono
 from .audio_edit import stitch_wavs, trim_silence_pcm16
 from .normalize_atc import normalize_atc
+from .tts_pronunciation import apply_pronunciation_map, normalize_diacritics
 from .voices import VoiceStore
 
 
@@ -26,11 +29,16 @@ DEFAULT_ROLES = ["delivery", "ground", "tower", "approach"]
 
 BASE_DIR = Path(__file__).resolve().parent
 UI_DIR = BASE_DIR / "ui"
+SETTINGS_PATH = BASE_DIR / "data" / "ui_settings.json"
+DEFAULT_SETTINGS = {"cache_enabled": True}
+PRONUNCIATION_PATH = BASE_DIR.parent / "pronunciation_map.json"
 
 engine = TtsEngine(BASE_DIR)
 cache = TtsCache(base_dir=BASE_DIR, model_version="voicelab-multi")
 voices = VoiceStore(base_dir=BASE_DIR)
 phrasepacks = PhrasePacks()
+_SETTINGS: Dict[str, bool] = {}
+logger = logging.getLogger("voicelab.tts")
 
 app = FastAPI(title="XTTS Voice Lab", version="0.1.0")
 app.mount("/static", StaticFiles(directory=UI_DIR), name="static")
@@ -44,6 +52,7 @@ class TtsRequest(BaseModel):
     speed: float = 1.0
     radio_profile: Optional[str] = None
     radio_intensity: Optional[float] = None
+    cache_enabled: Optional[bool] = None
     format: str = "wav"
     soft_pause_ms: Optional[int] = None
     hard_pause_ms: Optional[int] = None
@@ -65,6 +74,10 @@ class PrefetchRequest(BaseModel):
     limit: Optional[int] = None
 
 
+class SettingsRequest(BaseModel):
+    cache_enabled: Optional[bool] = None
+
+
 @app.get("/", response_class=FileResponse)
 async def index():
     index_path = UI_DIR / "index.html"
@@ -79,6 +92,7 @@ async def health():
     return {
         "model_loaded": engine.model_loaded,
         "cuda_available": engine.cuda_available,
+        "cache_enabled": _cache_enabled(),
         "cache_mode": _get_cache_mode(),
         "cache_items": stats["items"],
         "cache_bytes": stats["bytes"],
@@ -94,6 +108,19 @@ async def get_voices():
         "roles": DEFAULT_ROLES,
         "phrasesets": phrasepacks.list_sets(),
     }
+
+
+@app.get("/settings")
+async def get_settings():
+    return dict(_SETTINGS)
+
+
+@app.post("/settings")
+async def update_settings(body: SettingsRequest):
+    if body.cache_enabled is not None:
+        _SETTINGS["cache_enabled"] = bool(body.cache_enabled)
+        _save_settings(_SETTINGS)
+    return dict(_SETTINGS)
 
 
 def _voice_engine(voice: Dict) -> str:
@@ -208,9 +235,77 @@ def _resolve_voice_auto(body: TtsRequest) -> Dict:
     return _stable_pick(candidates, seed)
 
 
+def _load_settings() -> Dict[str, bool]:
+    settings = DEFAULT_SETTINGS.copy()
+    try:
+        if SETTINGS_PATH.exists():
+            raw = SETTINGS_PATH.read_text(encoding="utf-8")
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                for key in DEFAULT_SETTINGS:
+                    value = data.get(key)
+                    if isinstance(value, bool):
+                        settings[key] = value
+    except Exception:
+        pass
+    return settings
+
+
+def _save_settings(settings: Dict[str, bool]) -> None:
+    try:
+        SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SETTINGS_PATH.write_text(
+            json.dumps(settings, indent=2, ensure_ascii=True), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def _load_pronunciation_map() -> Dict[str, str]:
+    try:
+        if PRONUNCIATION_PATH.exists():
+            raw = PRONUNCIATION_PATH.read_text(encoding="utf-8")
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                cleaned: Dict[str, str] = {}
+                for key, value in data.items():
+                    if not isinstance(key, str) or not isinstance(value, str):
+                        continue
+                    key_clean = key.strip()
+                    value_clean = value.strip()
+                    if key_clean and value_clean:
+                        cleaned[key_clean] = value_clean
+                return cleaned
+    except Exception:
+        pass
+    return {}
+
+
+def _cache_enabled() -> bool:
+    return bool(_SETTINGS.get("cache_enabled", True))
+
+
+def _debug_pronunciation_enabled() -> bool:
+    value = os.environ.get("VOICELAB_DEBUG_PRONUNCIATION") or os.environ.get("VOICELAB_DEBUG")
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _get_cache_mode() -> str:
     mode = (os.environ.get("TTS_CACHE_MODE") or "segment").strip().lower()
     return "full" if mode == "full" else "segment"
+
+
+_SETTINGS.update(_load_settings())
+_PRONUNCIATION_MAP = _load_pronunciation_map()
+
+
+def _apply_pronunciation(text: str) -> Tuple[str, bool, List[Tuple[str, str]]]:
+    applied: List[Tuple[str, str]] = []
+    normalized = normalize_diacritics(text)
+    output = apply_pronunciation_map(normalized, _PRONUNCIATION_MAP, applied)
+    return output, output != text, applied
 
 
 @app.post("/tts")
@@ -234,14 +329,59 @@ async def tts(body: TtsRequest):
         radio_intensity = 0.5
     radio_intensity = max(0.0, min(1.0, radio_intensity))
 
-    normalized_atc, norm_changed = normalize_atc(body.text)
+    pronunciation_text, pronunciation_changed, pronunciation_applied = _apply_pronunciation(
+        body.text
+    )
+    if pronunciation_applied and _debug_pronunciation_enabled():
+        for source, replacement in pronunciation_applied:
+            logger.info("[TTS] pronunciation: %s -> %s", source, replacement)
+    normalized_atc, norm_changed = normalize_atc(pronunciation_text)
+    pronunciation_header = "true" if pronunciation_changed else "false"
     ref_wav = _resolve_ref_wav(voice)
     voice_model_version = engine.model_version_for_voice(voice)
     resolved_voice_id = str(voice.get("id") or body.voice_id)
     resolved_engine = _voice_engine(voice)
 
     cache_mode = _get_cache_mode()
+    cache_enabled = _cache_enabled()
+    if body.cache_enabled is not None:
+        cache_enabled = bool(body.cache_enabled)
     if cache_mode == "full":
+        if not cache_enabled:
+            text_norm = cache.normalize(normalized_atc)
+            if not text_norm:
+                raise HTTPException(
+                    status_code=400, detail="Text is empty after normalization."
+                )
+
+            base_audio = engine.synthesize_for_voice(
+                text=text_norm,
+                voice=voice,
+                speaker_wav=ref_wav,
+                language=body.language,
+                speed=body.speed,
+            ).wav_bytes
+
+            if not body.radio_profile or body.radio_profile == "clean":
+                final_audio = base_audio
+            else:
+                final_audio = apply_radio_profile(
+                    base_audio,
+                    profile=body.radio_profile or "clean",
+                    radio_intensity=radio_intensity,
+                )
+
+            headers = {
+                "X-Cache-Mode": "disabled",
+                "X-Cache": "OFF",
+                "X-Resolved-Voice-Id": resolved_voice_id,
+                "X-Resolved-Engine": resolved_engine,
+            }
+            headers["X-Pronunciation-Applied"] = pronunciation_header
+            if norm_changed:
+                headers["X-Normalized"] = "1"
+            return Response(content=final_audio, media_type="audio/wav", headers=headers)
+
         text_norm = cache.normalize(normalized_atc)
         if not text_norm:
             raise HTTPException(status_code=400, detail="Text is empty after normalization.")
@@ -293,6 +433,7 @@ async def tts(body: TtsRequest):
             "X-Resolved-Voice-Id": resolved_voice_id,
             "X-Resolved-Engine": resolved_engine,
         }
+        headers["X-Pronunciation-Applied"] = pronunciation_header
         if norm_changed:
             headers["X-Normalized"] = "1"
         return Response(content=result["audio"], media_type="audio/wav", headers=headers)
@@ -313,9 +454,10 @@ async def tts(body: TtsRequest):
         raise HTTPException(status_code=400, detail="Text is empty after segmentation.")
 
     segment_results = []
-    for segment in seg.segments:
-        segment_results.append(
-            cache.get_or_generate(
+    segment_wavs = []
+    if cache_enabled:
+        for segment in seg.segments:
+            result = cache.get_or_generate(
                 model_version=voice_model_version,
                 voice_id=resolved_voice_id,
                 role=body.role,
@@ -332,16 +474,28 @@ async def tts(body: TtsRequest):
                 ).wav_bytes,
                 return_audio=True,
             )
-        )
+            segment_results.append(result)
+            segment_wavs.append(result["audio"])
+    else:
+        for segment in seg.segments:
+            segment_wavs.append(
+                engine.synthesize_for_voice(
+                    text=segment,
+                    voice=voice,
+                    speaker_wav=ref_wav,
+                    language=body.language,
+                    speed=body.speed,
+                ).wav_bytes
+            )
 
     pauses_ms = [hard_pause if boundary == "hard" else soft_pause for boundary in seg.boundary_types]
-    _, sample_rate = wav_to_pcm16_mono(segment_results[0]["audio"], target_sample_rate=None)
+    _, sample_rate = wav_to_pcm16_mono(segment_wavs[0], target_sample_rate=None)
     trimmed_wavs = []
-    for result in segment_results:
+    for wav_data in segment_wavs:
         try:
-            trimmed_wavs.append(trim_silence_pcm16(result["audio"], sample_rate))
+            trimmed_wavs.append(trim_silence_pcm16(wav_data, sample_rate))
         except Exception:
-            trimmed_wavs.append(result["audio"])
+            trimmed_wavs.append(wav_data)
 
     stitched_clean = stitch_wavs(
         trimmed_wavs,
@@ -370,24 +524,27 @@ async def tts(body: TtsRequest):
     else:
         final_wav = apply_radio_profile(processed, profile=body.radio_profile, radio_intensity=radio_intensity)
 
-    hits = sum(1 for r in segment_results if r.get("from_cache"))
-    total = len(segment_results)
-    if hits == total:
-        cache_header = "HIT"
-    elif hits == 0:
-        cache_header = "MISS"
-    else:
-        cache_header = "MIXED"
-
+    total = len(segment_wavs)
     headers = {
-        "X-Cache-Mode": "segment",
-        "X-Cache": cache_header,
+        "X-Cache-Mode": "segment" if cache_enabled else "disabled",
+        "X-Cache": "OFF",
         "X-Cache-Segments": str(total),
-        "X-Cache-Hits": str(hits),
+        "X-Cache-Hits": "0",
         "X-Segment-Delimiter": seg.delimiter,
         "X-Resolved-Voice-Id": resolved_voice_id,
         "X-Resolved-Engine": resolved_engine,
     }
+    headers["X-Pronunciation-Applied"] = pronunciation_header
+    if cache_enabled:
+        hits = sum(1 for r in segment_results if r.get("from_cache"))
+        if hits == total:
+            cache_header = "HIT"
+        elif hits == 0:
+            cache_header = "MISS"
+        else:
+            cache_header = "MIXED"
+        headers["X-Cache"] = cache_header
+        headers["X-Cache-Hits"] = str(hits)
     if norm_changed:
         headers["X-Normalized"] = "1"
     return Response(content=final_wav, media_type="audio/wav", headers=headers)
@@ -398,6 +555,8 @@ async def prefetch(body: PrefetchRequest):
     voice = voices.get(body.voice_id)
     if not voice:
         raise HTTPException(status_code=404, detail="Voice not found.")
+    if not _cache_enabled():
+        raise HTTPException(status_code=400, detail="Cache is disabled.")
 
     if body.radio_profile and not validate_radio_profile(body.radio_profile):
         raise HTTPException(status_code=400, detail="Unknown radio profile.")
@@ -409,7 +568,8 @@ async def prefetch(body: PrefetchRequest):
     voice_model_version = engine.model_version_for_voice(voice)
     items = []
     for phrase in phrases:
-        normalized_atc, _ = normalize_atc(phrase)
+        pronunciation_text, _, _ = _apply_pronunciation(phrase)
+        normalized_atc, _ = normalize_atc(pronunciation_text)
         normalized = cache.normalize(normalized_atc)
         ref_wav = _resolve_ref_wav(voice)
 
