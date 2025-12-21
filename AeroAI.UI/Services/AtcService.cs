@@ -10,7 +10,6 @@ using AeroAI.Atc;
 using AeroAI.Audio;
 using AeroAI.Data;
 using AeroAI.Models;
-using AeroAI.Llm;
 using AeroAI.Config;
 using AeroAI.UI.Services;
 using AtcNavDataDemo.Config;
@@ -196,12 +195,8 @@ public class AtcService : IDisposable
         _voiceEngine = await CreateVoiceEngineAsync(voiceConfig, userConfig);
         _voiceOverride = Environment.GetEnvironmentVariable("AEROAI_VOICE_PROFILE");
 
-        var llmClient = new OpenAiLlmClient(
-            apiKey: EnvironmentConfig.GetOpenAiApiKey(),
-            model: EnvironmentConfig.GetOpenAiModel(),
-            baseUrl: EnvironmentConfig.GetOpenAiBaseUrl());
-
-        _llmSession = new AeroAiLlmSession(llmClient, _flightContext);
+        var atcGenerator = CreateAtcResponseGenerator(userConfig);
+        _llmSession = new AeroAiLlmSession(atcGenerator, _flightContext, OnDebug);
 
         // Initialize the shared normalizer with STT correction layer
         var sttCorrectionLayer = new SttCorrectionLayer(OnDebug);
@@ -256,6 +251,35 @@ public class AtcService : IDisposable
 
         OnDebug?.Invoke("TTS disabled (VoiceLab unavailable and no OpenAI API key).");
         return new NullVoiceEngine();
+    }
+
+    private IAtcResponseGenerator CreateAtcResponseGenerator(UserConfig userConfig)
+    {
+        var provider = userConfig.AtcTextProvider?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            provider = "openai";
+        }
+
+        if (provider == "template")
+        {
+            return new TemplateAtcResponseGenerator(OnDebug);
+        }
+
+        try
+        {
+            EnvironmentConfig.Load();
+            return new OpenAiAtcResponseGenerator(
+                EnvironmentConfig.GetOpenAiApiKey(),
+                EnvironmentConfig.GetOpenAiModel(),
+                EnvironmentConfig.GetOpenAiBaseUrl(),
+                EnvironmentConfig.GetSystemPromptPath(),
+                OnDebug);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException($"ATC provider openai failed to initialize: {ex.Message}", ex);
+        }
     }
 
     public void UpdateConnectedController(string? role, double? frequencyMhz)

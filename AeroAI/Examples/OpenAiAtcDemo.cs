@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using AeroAI.Atc;
-using AeroAI.Llm;
+using AeroAI.Config;
 using AeroAI.Models;
 
 namespace AeroAI.Examples;
@@ -11,7 +11,8 @@ public static class OpenAiAtcDemo
 	public static async Task RunDemoAsync(string apiKey, string model = "gpt-4o-mini")
 	{
 		Console.WriteLine("=== AeroAI OpenAI-Powered ATC Demo ===\n");
-		OpenAiLlmClient llm = new OpenAiLlmClient(apiKey, model);
+        EnvironmentConfig.Load();
+        using var generator = new OpenAiAtcResponseGenerator(apiKey, model);
 		FlightContext context = new FlightContext
 		{
 			CurrentPhase = FlightPhase.Preflight_Clearance,
@@ -30,7 +31,7 @@ public static class OpenAiAtcDemo
 			HasIlsOrLocalizer = true,
 			HasRnavApproach = true
 		};
-		AeroAiLlmSession session = new AeroAiLlmSession(llm, context);
+        AeroAiLlmSession session = new AeroAiLlmSession(generator, context);
 		string pilotTransmission = "Good evening Clearance this is CJ at stand 45 requesting IFR clearance to Casablanca as filed";
 		Console.WriteLine("PILOT → " + pilotTransmission + "\n");
 		try
@@ -46,9 +47,9 @@ public static class OpenAiAtcDemo
 				Console.WriteLine("Inner exception: " + ex2.InnerException.Message);
 			}
 		}
-		finally
-		{
-			((IDisposable)llm)?.Dispose();
-		}
-	}
+                finally
+                {
+                        // generator disposed via using declaration.
+                }
+        }
 }

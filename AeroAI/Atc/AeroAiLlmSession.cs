@@ -6,8 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using AeroAI.Config;
-using AeroAI.Llm;
-using AeroAI.Atc;
 using AeroAI.Models;
 using AeroAI.Data;
 
@@ -15,7 +13,7 @@ namespace AeroAI.Atc;
 
 public class AeroAiLlmSession : IDisposable
 {
-	private readonly AeroAiPhraseEngine _phraseEngine;
+        private readonly IAtcResponseGenerator _responseGenerator;
 
 	private readonly FlightContext _context;
 
@@ -58,33 +56,12 @@ public class AeroAiLlmSession : IDisposable
 		}
 	}
 
-	public AeroAiLlmSession(ILlmClient llm, FlightContext context)
-	{
-		_context = context ?? throw new ArgumentNullException("context");
-		_intentParser = new PilotIntentParser();
-		if (llm is OpenAiLlmClient)
-		{
-			EnvironmentConfig.Load();
-			try
-			{
-				string openAiApiKey = EnvironmentConfig.GetOpenAiApiKey();
-				string openAiModel = EnvironmentConfig.GetOpenAiModel();
-				string openAiBaseUrl = EnvironmentConfig.GetOpenAiBaseUrl();
-				string systemPromptPath = EnvironmentConfig.GetSystemPromptPath();
-				_phraseEngine = new AeroAiPhraseEngine(openAiApiKey, openAiModel, openAiBaseUrl, systemPromptPath);
-				return;
-			}
-			catch (InvalidOperationException ex)
-			{
-				throw new InvalidOperationException("Failed to initialize OpenAI client: " + ex.Message + ". Please ensure your .env file contains OPENAI_API_KEY=sk-your-key-here", ex);
-			}
-			catch (FileNotFoundException ex2)
-			{
-				throw new FileNotFoundException("System prompt file not found: " + ex2.Message + ". Please ensure prompts/aeroai_system_prompt.txt exists.", ex2);
-			}
-		}
-		throw new NotSupportedException("Only OpenAI is currently supported. Please use OpenAiLlmClient.");
-	}
+        public AeroAiLlmSession(IAtcResponseGenerator responseGenerator, FlightContext context, Action<string>? onDebug = null)
+        {
+                _context = context ?? throw new ArgumentNullException("context");
+                _intentParser = new PilotIntentParser();
+                _responseGenerator = responseGenerator ?? throw new ArgumentNullException(nameof(responseGenerator));
+        }
 
 	public async Task<string?> HandlePilotTransmissionAsync(string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
 	{
@@ -643,21 +620,21 @@ public class AeroAiLlmSession : IDisposable
 			}
 			return await HandleClearanceAsync(atcContext, pilotTransmission, cancellationToken, maskDestination: ShouldMaskDestination(pilotTransmission), pilotIntent: pilotIntent);
 		case FlightPhase.Taxi_Out:
-			return await PhaseHandlers.HandleTaxiOutPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleTaxiOutPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Lineup_Takeoff:
-			return await PhaseHandlers.HandleLineupTakeoffPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleLineupTakeoffPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Climb_Departure:
-			return await PhaseHandlers.HandleDepartureClimbPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleDepartureClimbPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Enroute:
-			return await PhaseHandlers.HandleEnroutePhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleEnroutePhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Descent_Arrival:
-			return await PhaseHandlers.HandleArrivalPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleArrivalPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Approach:
-			return await PhaseHandlers.HandleApproachPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleApproachPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Landing:
-			return await PhaseHandlers.HandleLandingPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleLandingPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		case FlightPhase.Taxi_In:
-			return await PhaseHandlers.HandleTaxiInPhase(pilotTransmission, atcContext, _context, _phraseEngine, cancellationToken);
+                        return await PhaseHandlers.HandleTaxiInPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
 		default:
 			if (!HasContextChanged(atcContext))
 			{
@@ -1093,7 +1070,15 @@ public class AeroAiLlmSession : IDisposable
 	{
 		try
 		{
-			_lastAtcResponse = (await _phraseEngine.GenerateAtcTransmissionAsync(context, pilotTransmission, _context, cancellationToken)).Trim();
+                        var request = new AtcRequest
+                        {
+                                TranscriptText = pilotTransmission,
+                                ControllerRole = context.ControllerRole,
+                                FlightContext = _context,
+                                SessionState = _state,
+                                AtcContext = context
+                        };
+                        _lastAtcResponse = (await _responseGenerator.GenerateAsync(request, cancellationToken)).SpokenText.Trim();
 			_lastContext = context;
 			if (HasCriticalItems(context))
 			{
@@ -1283,7 +1268,10 @@ public class AeroAiLlmSession : IDisposable
 	{
 		if (!_disposed)
 		{
-			_phraseEngine?.Dispose();
+                        if (_responseGenerator is IDisposable disposable)
+                        {
+                                disposable.Dispose();
+                        }
 			_disposed = true;
 		}
 	}

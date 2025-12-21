@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using AeroAI.Data;
-using AeroAI.Llm;
 
 namespace AeroAI.Atc;
 
@@ -29,9 +28,9 @@ internal static class PendingConfirmationTests
 			CurrentAtcUnit = AtcUnit.ClearanceDelivery
 		};
 
-		// Use a dummy OpenAI client; no calls are made because clearance is deterministic.
-		var dummyLlm = new OpenAiLlmClient("sk-test", baseUrl: "https://api.invalid");
-		var session = new AeroAiLlmSession(dummyLlm, ctx);
+                // Use a stub generator; no calls are made because clearance is deterministic.
+                var generator = new TemplateAtcResponseGenerator();
+                var session = new AeroAiLlmSession(generator, ctx);
 
 		// Act: pilot requests clearance to mismatched destination -> prompt for confirmation.
 		var first = await session.HandlePilotTransmissionAsync("Easy 113 requesting clearance to Stansted");

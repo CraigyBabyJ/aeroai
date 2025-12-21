@@ -1,4 +1,5 @@
 {
-  "SimBriefUsername": ""
+  "SimBriefUsername": "",
+  "AtcTextProvider": "openai"
 }
 

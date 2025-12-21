@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,22 +30,28 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 
 	private readonly HttpClient _httpClient;
 
-	private readonly string _apiKey;
+        private readonly string _apiKey;
 
-	private readonly string _model;
+        private readonly string _model;
 
-	private readonly JsonSerializerOptions _jsonOptions;
+        private readonly JsonSerializerOptions _jsonOptions;
+        private static readonly JsonSerializerOptions DebugJsonOptions = new()
+        {
+                WriteIndented = true
+        };
+        private readonly Action<string>? _onDebug;
 
 	private bool _disposed;
 
-	public OpenAiLlmClient(string apiKey, string? model = null, string? baseUrl = null)
-	{
-		if (string.IsNullOrWhiteSpace(apiKey))
-		{
-			throw new ArgumentException("API key cannot be null or empty.", "apiKey");
-		}
-		_apiKey = apiKey;
-		_model = model ?? "gpt-4o-mini";
+        public OpenAiLlmClient(string apiKey, string? model = null, string? baseUrl = null, Action<string>? onDebug = null)
+        {
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                        throw new ArgumentException("API key cannot be null or empty.", "apiKey");
+                }
+                _apiKey = apiKey;
+                _model = model ?? "gpt-4o-mini";
+                _onDebug = onDebug;
 		if (!string.IsNullOrWhiteSpace(baseUrl) && !baseUrl.TrimEnd('/').Equals("https://api.openai.com/v1", StringComparison.OrdinalIgnoreCase))
 		{
 			Debug.WriteLine($"Warning: baseUrl parameter '{baseUrl}' ignored. Using hardcoded '{"https://api.openai.com/v1/"}' to ensure correct URL construction.");
@@ -108,14 +114,22 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 		};
 		try
 		{
-			string fullUrl = $"{_httpClient.BaseAddress}{"chat/completions"}";
-			HttpResponseMessage response = await _httpClient.PostAsJsonAsync("chat/completions", requestBody, cancellationToken);
-			if (!response.IsSuccessStatusCode)
-			{
-				string errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
-				string errorMessage;
-				if (!string.IsNullOrWhiteSpace(errorBody) && (errorBody.Contains("<html>", StringComparison.OrdinalIgnoreCase) || errorBody.Contains("nginx", StringComparison.OrdinalIgnoreCase) || errorBody.Contains("<center>", StringComparison.OrdinalIgnoreCase)))
-				{
+                        string fullUrl = $"{_httpClient.BaseAddress}{"chat/completions"}";
+                        string requestJson = JsonSerializer.Serialize(requestBody, DebugJsonOptions);
+                        _onDebug?.Invoke($"[OpenAI] request: POST {fullUrl}\n{requestJson}");
+
+                        using var request = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
+                        {
+                                Content = new StringContent(requestJson, Encoding.UTF8, "application/json")
+                        };
+                        HttpResponseMessage response = await _httpClient.SendAsync(request, cancellationToken);
+                        if (!response.IsSuccessStatusCode)
+                        {
+                                string errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                                _onDebug?.Invoke($"[OpenAI] response: {(int)response.StatusCode} {response.ReasonPhrase}\n{errorBody}");
+                                string errorMessage;
+                                if (!string.IsNullOrWhiteSpace(errorBody) && (errorBody.Contains("<html>", StringComparison.OrdinalIgnoreCase) || errorBody.Contains("nginx", StringComparison.OrdinalIgnoreCase) || errorBody.Contains("<center>", StringComparison.OrdinalIgnoreCase)))
+                                {
 					errorMessage = $"Request intercepted by proxy/nginx (not reaching OpenAI servers). Status: {response.StatusCode} ({response.ReasonPhrase}). URL: {fullUrl}. This usually indicates a VPN, proxy, or network configuration issue. Try disabling VPN/proxy or check your network settings.";
 				}
 				else
@@ -125,7 +139,9 @@ public sealed class OpenAiLlmClient : ILlmClient, IDisposable
 				}
 				throw new HttpRequestException(errorMessage);
 			}
-			OpenAiResponse? jsonResponse = await response.Content.ReadFromJsonAsync<OpenAiResponse>(_jsonOptions, cancellationToken);
+                        string responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                        _onDebug?.Invoke($"[OpenAI] response: {(int)response.StatusCode} {response.ReasonPhrase}\n{responseBody}");
+                        OpenAiResponse? jsonResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseBody, _jsonOptions);
 			if (jsonResponse == null)
 			{
 				throw new InvalidOperationException("Failed to parse OpenAI response: response body was null.");

@@ -11,6 +11,7 @@ public sealed class UserConfig
     public string SimBriefUsername { get; set; } = string.Empty;
     public AudioConfig Audio { get; set; } = new();
     public TtsConfig Tts { get; set; } = new();
+    public string AtcTextProvider { get; set; } = "openai";
 }
 
 public sealed class AudioConfig
@@ -69,6 +70,8 @@ public static class UserConfigStore
                 config.Audio = new AudioConfig();
             if (config.Tts == null)
                 config.Tts = new TtsConfig();
+            if (string.IsNullOrWhiteSpace(config.AtcTextProvider))
+                config.AtcTextProvider = "openai";
             return config;
         }
         catch

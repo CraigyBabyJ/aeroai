@@ -1,13 +1,12 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using AeroAI.Llm;
 
 namespace AeroAI.Atc;
 
 public static class PhaseHandlers
 {
-	public static async Task<string?> HandleClearancePhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleClearancePhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		if (IsAck(pilotText))
 		{
@@ -27,14 +26,14 @@ public static class PhaseHandlers
 			{
 				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
 				context.Permissions.AllowIfrClearance = false;
-				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 			}
 
 			if (ready && !context.StateFlags.IfrClearanceIssued)
 			{
 				context.ClearanceDecision.ClearanceType = "IFR_CLEARANCE";
 				context.Permissions.AllowIfrClearance = true;
-				string atc = (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        string atc = await GenerateAsync(generator, context, flightContext, pilotText, ct);
 				context.StateFlags.IfrClearanceIssued = true;
 				flightContext.CurrentAtcState = AtcState.ClearanceIssued;
 				return atc;
@@ -44,7 +43,7 @@ public static class PhaseHandlers
 			{
 				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
 				context.Permissions.AllowIfrClearance = false;
-				return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 			}
 
 			return null;
@@ -56,13 +55,13 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleTaxiOutPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleTaxiOutPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "TAXI";
 			context.Permissions.AllowTaxi = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -72,7 +71,7 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleLineupTakeoffPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleLineupTakeoffPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
@@ -87,7 +86,7 @@ public static class PhaseHandlers
 				context.ClearanceDecision.ClearanceType = "TAKEOFF";
 				context.Permissions.AllowTakeoffClearance = true;
 			}
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -97,12 +96,12 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleDepartureClimbPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleDepartureClimbPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "CLIMB";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -112,12 +111,12 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleEnroutePhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleEnroutePhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -127,12 +126,12 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleArrivalPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleArrivalPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "DESCENT";
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -142,13 +141,13 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleApproachPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleApproachPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "APPROACH";
 			context.Permissions.AllowApproachClearance = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -158,13 +157,13 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleLandingPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleLandingPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "LANDING";
 			context.Permissions.AllowLandingClearance = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -174,13 +173,13 @@ public static class PhaseHandlers
 		}
 	}
 
-	public static async Task<string?> HandleTaxiInPhase(string pilotText, AtcContext context, FlightContext flightContext, AeroAiPhraseEngine phraseEngine, CancellationToken ct = default(CancellationToken))
+    public static async Task<string?> HandleTaxiInPhase(string pilotText, AtcContext context, FlightContext flightContext, IAtcResponseGenerator generator, CancellationToken ct = default(CancellationToken))
 	{
 		try
 		{
 			context.ClearanceDecision.ClearanceType = "TAXI";
 			context.Permissions.AllowTaxi = true;
-			return (await phraseEngine.GenerateAtcTransmissionAsync(context, pilotText, flightContext, ct)).Trim();
+                        return await GenerateAsync(generator, context, flightContext, pilotText, ct);
 		}
 		catch (Exception ex)
 		{
@@ -190,7 +189,7 @@ public static class PhaseHandlers
 		}
 	}
 
-	private static bool IsAck(string s)
+    private static bool IsAck(string s)
 	{
 		if (string.IsNullOrWhiteSpace(s))
 		{
@@ -198,6 +197,20 @@ public static class PhaseHandlers
 		}
 
 		string t = s.Trim().ToLowerInvariant();
-		return t.Contains("standby") || t.Contains("roger") || t.Contains("copy") || t.Contains("wilco") || t.Contains("ok");
-	}
+        return t.Contains("standby") || t.Contains("roger") || t.Contains("copy") || t.Contains("wilco") || t.Contains("ok");
+    }
+
+    private static async Task<string> GenerateAsync(IAtcResponseGenerator generator, AtcContext context, FlightContext flightContext, string pilotText, CancellationToken ct)
+    {
+        var request = new AtcRequest
+        {
+            TranscriptText = pilotText,
+            ControllerRole = context.ControllerRole,
+            FlightContext = flightContext,
+            SessionState = null,
+            AtcContext = context
+        };
+        var response = await generator.GenerateAsync(request, ct);
+        return response.SpokenText.Trim();
+    }
 }

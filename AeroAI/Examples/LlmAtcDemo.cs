@@ -1,7 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using AeroAI.Atc;
-using AeroAI.Llm;
 using AeroAI.Models;
 
 namespace AeroAI.Examples;
@@ -11,7 +10,7 @@ public static class LlmAtcDemo
 	public static async Task RunDemoAsync()
 	{
 		Console.WriteLine("=== AeroAI LLM-Powered ATC Demo ===\n");
-		OllamaLlmClient llm = new OllamaLlmClient("http://192.168.1.100:11434", "aeroai");
+        var generator = new TemplateAtcResponseGenerator();
 		FlightContext context = new FlightContext
 		{
 			CurrentPhase = FlightPhase.Preflight_Clearance,
@@ -30,7 +29,7 @@ public static class LlmAtcDemo
 			HasIlsOrLocalizer = true,
 			HasRnavApproach = true
 		};
-		AeroAiLlmSession session = new AeroAiLlmSession(llm, context);
+        AeroAiLlmSession session = new AeroAiLlmSession(generator, context);
 		string pilotTransmission = "Munich Clearance, AeroAI one two three, IFR to Innsbruck, ready to copy.";
 		Console.WriteLine("PILOT → " + pilotTransmission + "\n");
 		try
@@ -46,9 +45,9 @@ public static class LlmAtcDemo
 				Console.WriteLine("Inner exception: " + ex2.InnerException.Message);
 			}
 		}
-		finally
-		{
-			((IDisposable)llm)?.Dispose();
-		}
-	}
+                finally
+                {
+                        // template generator has no disposable resources.
+                }
+        }
 }
