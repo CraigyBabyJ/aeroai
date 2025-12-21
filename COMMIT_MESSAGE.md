@@ -22,12 +22,7 @@ Added WPF UI, updated fine-tuned model configuration, and improved SimBrief inte
 - Saves Pilot ID back to userconfig.json after import
 - Handles multiple file path locations (current dir, parent, project root)
 
-### 4. Voice Profile Updates
-- Simplified atc_uk_delivery_female.json style_hint for more consistent TTS
-- Changed voice to "coral" for better consistency
-- Removed style_hint to reduce OpenAI TTS variability
-
-### 5. Project Structure
+### 4. Project Structure
 - Created AeroAI.UI.csproj with WPF support
 - Added solution file (AeroAI.sln)
 - Configured to include source files from parent project
@@ -43,7 +38,6 @@ Added WPF UI, updated fine-tuned model configuration, and improved SimBrief inte
 - AeroAI/Config/EnvironmentConfig.cs (updated)
 
 ## Files Modified
-- voices/atc_uk_delivery_female.json
 - AeroAI/Config/EnvironmentConfig.cs
 - agent.md
 

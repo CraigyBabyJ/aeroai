@@ -32,6 +32,7 @@ public class VoiceLabAudioVoiceEngineTests
         Assert.Equal("auto", client.LastRequest!.VoiceId);
         Assert.Equal("tower", client.LastRequest.Role);
         Assert.Equal("EGLL", client.LastRequest.AirportIcao);
+        Assert.Equal("EGLL", client.LastRequest.SessionId);
     }
 
     private sealed class StubTtsClient : ITtsClient

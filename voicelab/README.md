@@ -478,6 +478,12 @@ voices/
 
 **Note:** Accent comes from the reference audio (`ref.wav`). Keep text inputs in English.
 
+### Voice Selection Contract
+
+- Clients send `voice_id="auto"` plus `role` and `facility_icao` (full ICAO).
+- VoiceLab derives `region_prefix` from `facility_icao` and selects by `role` + region.
+- XTTS voices win when present for a matching role/region; Coqui VITS is used only as a UK (EG/EI) fallback.
+
 ### Reference Audio Requirements
 
 - **Format**: WAV, mono, 16-bit PCM

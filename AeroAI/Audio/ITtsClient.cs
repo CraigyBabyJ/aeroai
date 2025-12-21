@@ -15,6 +15,7 @@ public sealed class TtsRequest
     public string Text { get; init; } = string.Empty;
     public string VoiceId { get; init; } = "auto";
     public string? Role { get; init; }
+    public string? SessionId { get; init; }
     public string Language { get; init; } = "en";
     public double Speed { get; init; } = 1.0;
     public string Format { get; init; } = "wav";

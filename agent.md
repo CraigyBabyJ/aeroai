@@ -203,57 +203,26 @@ OpenAI TTS (WAV) → Radio Effects → Squelch Tail → NAudio Playback
 
 ---
 
-## Voice Profiles
+## VoiceLab Profiles
 
 ### Location
-`voices/*.json` - One file per voice profile
+`voicelab/xtts_service/voices/<voice_id>/meta.json`
 
-### Example Profile (`atc_uk_delivery_female.json`)
-```json
-{
-  "id": "atc_uk_delivery_female",
-  "display_name": "UK Delivery (Female)",
-  "tts_model": "gpt-4o-mini-tts",
-  "voice": "nova",
-  "speaking_rate": 1.1,
-  "style_hint": "Speak in a calm, professional British female air traffic controller voice...",
-  "region_codes": ["EG"],
-  "controller_types": ["DELIVERY"]
-}
-```
-
-### Profile Selection Logic
-1. Match by `region_codes` (ICAO prefix, e.g., "EG" for UK)
-2. Match by `controller_types` (DELIVERY, GROUND, TOWER, etc.)
-3. Fall back to `default.json`
-
-### Key Fields
-| Field | Purpose |
-|-------|---------|
-| `tts_model` | OpenAI model (e.g., `gpt-4o-mini-tts`) |
-| `voice` | OpenAI voice ID (`nova`, `alloy`, `echo`, etc.) |
-| `speaking_rate` | Speed multiplier (1.0 = normal, 1.1 = slightly fast) |
-| `style_hint` | Passed to OpenAI `instructions` for consistent accent/style |
-| `region_codes` | ICAO prefixes this profile applies to |
-| `controller_types` | Controller roles this profile applies to |
+### Selection Contract
+1. AeroAI sends `voice_id="auto"` plus `role` and `facility_icao`.
+2. VoiceLab derives the ICAO prefix from `facility_icao` and selects by `role` + region.
+3. XTTS voices override Coqui when present; Coqui VITS is used only as UK (EG/EI) fallback.
 
 ---
 
 ## Recent Changes Summary
 
 ### Audio System
-- ✅ OpenAI TTS now requests **WAV** (not MP3) for lower latency
+- ✅ VoiceLab handles all TTS selection via `meta.json` profiles
 - ✅ Radio effects applied via `AtcAudioEffectProcessor`
 - ✅ Squelch tail (`delivery-tail.wav`) appended after each response
 - ✅ Effect intensity varies by controller type (Delivery=best, Center=worst)
 - ✅ All audio processing is **in-memory** (no temp files)
-- ✅ `style_hint` passed to OpenAI for consistent voice
-
-### Voice Profiles
-- ✅ Profile system loads from `voices/*.json`
-- ✅ Profiles selected by region (ICAO prefix) + controller type
-- ✅ `speaking_rate` fixed at 1.1 (was 1.7, too fast)
-- ✅ `controller_role` uses "DELIVERY" (not "CLEARANCE")
 
 ### LLM & Training
 - ✅ Training data: ~22,000 examples in `Data/training_aeroai.json`

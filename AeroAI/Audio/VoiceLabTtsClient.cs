@@ -80,6 +80,7 @@ public sealed class VoiceLabTtsClient : ITtsClient
             Text = request.Text,
             VoiceId = string.IsNullOrWhiteSpace(request.VoiceId) ? "auto" : request.VoiceId,
             Role = request.Role,
+            SessionId = request.SessionId,
             Language = string.IsNullOrWhiteSpace(request.Language) ? "en" : request.Language,
             Speed = request.Speed,
             Format = string.IsNullOrWhiteSpace(request.Format) ? "wav" : request.Format,
@@ -143,6 +144,9 @@ public sealed class VoiceLabTtsClient : ITtsClient
 
         [JsonPropertyName("role")]
         public string? Role { get; set; }
+
+        [JsonPropertyName("session_id")]
+        public string? SessionId { get; set; }
 
         [JsonPropertyName("language")]
         public string Language { get; set; } = "en";

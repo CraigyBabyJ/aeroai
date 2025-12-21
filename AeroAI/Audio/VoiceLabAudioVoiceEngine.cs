@@ -45,6 +45,7 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
         var flight = _getFlightContext();
         var resolvedRole = NormalizeRole(role) ?? ResolveRoleFromUnit(flight?.CurrentAtcUnit);
         var resolvedFacility = ResolveFacilityIcao(facilityIcao, flight);
+        var sessionId = ResolveSessionId(flight, resolvedFacility);
 
         var hints = AirportDataService.GetRegionHints(resolvedFacility);
 
@@ -53,6 +54,7 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
             Text = text,
             VoiceId = "auto",
             Role = resolvedRole,
+            SessionId = sessionId,
             Language = "en",
             Speed = 1.0,
             Format = "wav",
@@ -118,6 +120,18 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
         if (string.IsNullOrWhiteSpace(icao))
             icao = useDestination ? flight.OriginIcao : flight.DestinationIcao;
         return string.IsNullOrWhiteSpace(icao) ? null : icao.Trim().ToUpperInvariant();
+    }
+
+    private static string? ResolveSessionId(FlightContext? flight, string? facilityIcao)
+    {
+        if (flight != null)
+        {
+            if (!string.IsNullOrWhiteSpace(flight.RadioCallsign))
+                return flight.RadioCallsign.Trim();
+            if (!string.IsNullOrWhiteSpace(flight.Callsign))
+                return flight.Callsign.Trim();
+        }
+        return string.IsNullOrWhiteSpace(facilityIcao) ? null : facilityIcao.Trim().ToUpperInvariant();
     }
 
     private static AtcUnit MapRoleToUnit(string? role, AtcUnit? fallbackUnit)
