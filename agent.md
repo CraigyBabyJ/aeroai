@@ -8,7 +8,7 @@
 - Ground frequency lookup: `Data/AirportFrequencies.cs` loads `Data/airport-frequencies.json` and `FlightContextToAtcContextMapper` injects `ground_frequency_mhz` when available; prompt allows adding a ground handoff on correct readback.
 - Clearance gating: `PhaseDefaults` no longer blocks clearance when `ifr_clearance_issued` is true; if data is complete, `allow_ifr_clearance` stays true.
 - Reset support: `FlightContext.ResetForNewFlight()` and `AeroAiLlmSession.ResetForNewFlight()` clear state/flags/runway/squawk/etc. for a new session.
-- Voice/TTS: `Config/VoiceConfig` + `VoiceConfigLoader` (env-driven, TTS optional). `IAtcVoiceEngine` has an optional `VoiceProfile` parameter; `OpenAiAudioVoiceEngine` uses profile overrides (model/voice/speed) per call. Profiles load from `voices/*.json` via `VoiceProfileLoader`/`VoiceProfileManager`. Gibraltar override via `AEROAI_VOICE_GIBRALTAR` selects `gibraltar_english` or `gibraltar_spanish`; profiles use prefix `region_codes` (e.g., `LX`), `controller_types` to match CLEARANCE. Fallbacks: default profile then env config; logs warnings, never breaks text.
+- Voice/TTS: Voice selection lives in VoiceLab (`voicelab/xtts_service/voices/<id>/meta.json`). AeroAI always sends `voice_id="auto"` plus role + facility ICAO; VoiceLab picks by role and region prefix.
 
 ### Quick how-to
 1) Run the AeroAI UI and watch the debug output for `=== ATC DEBUG PROMPT/RESPONSE ===` blocks. Set `AEROAI_LOG_FILE=logs/atc.log` if you want file logging.
@@ -23,13 +23,13 @@
 - `AeroAI/Atc/FlightContext.cs` and `AeroAI/Atc/AeroAiLlmSession.cs` - reset methods for a fresh flight/session.
 - `AeroAI/Atc/FlightContextToAtcContextMapper.cs` - injects ground frequency when available.
 - `Data/AirportFrequencies.cs` - JSON-backed ground frequency lookup; `AeroAI.UI/AeroAI.UI.csproj` copies the JSON to output. Use `Data/convert_frequencies_to_json.py` to convert CSV to JSON.
-- `voices/` - voice profiles (`default`, `gibraltar_english`, `gibraltar_spanish`) with `region_codes` prefixes and `controller_types`; `VoiceProfileLoader`/`VoiceProfileManager` select profiles; `OpenAiAudioVoiceEngine` uses them.
+- `voicelab/xtts_service/voices/` - VoiceLab profiles (`meta.json`) with `engine`, `roles`, and `region_codes` for auto selection.
 - `AeroAI.UI/Services/WhisperSttService.cs` - push-to-talk mic capture + whisper-cli transcription (UI mic button in input bar, looks for whisper/whisper-cli.exe and whisper/models/ggml-medium.en-q5_0.bin).
 
 ### Env vars
 - `AEROAI_LOG_FILE` - optional path to append prompt/response logs.
 - `AEROAI_LOG_API` - if set to truthy, also triggers the older API logging block.
-- TTS/voices: `AEROAI_TTS_ENABLED`, `OPENAI_API_KEY`, `AEROAI_TTS_MODEL`, `AEROAI_TTS_VOICE`, `AEROAI_TTS_SPEED`, `OPENAI_API_BASE`, `AEROAI_VOICE_PROFILE`, `AEROAI_VOICE_GIBRALTAR` (english/spanish).
+- VoiceLab base URL and enable toggle are stored in `userconfig.json` (`Tts.VoiceLabBaseUrl`, `Tts.VoiceLabEnabled`).
 - Whisper STT (UI push-to-talk): place `whisper-cli.exe` in `whisper/` and `ggml-medium.en-q5_0.bin` in `whisper/models/`.
 -### Open issues / next steps
 - Verify runway selection runs before clearance call; if `dep_runway` is missing in the prompt, model still asks for it. Add a debug print before mapping to ensure the picker populated `SelectedDepartureRunway`.
@@ -151,7 +151,6 @@ OpenAI TTS (WAV) → Radio Effects → Squelch Tail → NAudio Playback
 ### Key Audio Files
 | File | Purpose |
 |------|---------|
-| `Audio/OpenAiAudioVoiceEngine.cs` | Main TTS engine, calls OpenAI API, applies effects |
 | `Audio/TtsPlayback.cs` | WAV/MP3 playback via NAudio |
 | `Audio/AtcAudioEffectProcessor.cs` | Applies DSP effects to WAV bytes |
 | `Audio/RadioEffectProcessor.cs` | In-memory WAV processing, squelch tail |

@@ -43,7 +43,6 @@
     <None Include="..\Config\audio-effects.json" Link="Config\audio-effects.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Config\stt_corrections.json" Link="Config\stt_corrections.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Data\aircraft_type.json" Link="Data\aircraft_type.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\voices\*.json" LinkBase="voices" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Assets\Audio\**\*.mp3" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Assets\Audio\**\*.wav" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\prompts\*.txt" LinkBase="prompts" CopyToOutputDirectory="PreserveNewest" />

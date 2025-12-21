@@ -5,5 +5,5 @@ namespace AeroAI.Audio;
 
 public interface IAtcVoiceEngine
 {
-    Task SpeakAsync(string text, AtcNavDataDemo.Config.VoiceProfile? profile = null, CancellationToken cancellationToken = default);
+    Task SpeakAsync(string text, string? role = null, string? facilityIcao = null, CancellationToken cancellationToken = default);
 }

@@ -23,8 +23,6 @@ public class AtcService : IDisposable
     private FlightContext? _flightContext;
     private AeroAiLlmSession? _llmSession;
     private IAtcVoiceEngine? _voiceEngine;
-    private VoiceProfileManager? _voiceProfileManager;
-    private string? _voiceOverride;
     private readonly HttpClient _httpClient;
     private string? _connectedControllerRole;
     private double? _connectedControllerFrequency;
@@ -189,12 +187,8 @@ public class AtcService : IDisposable
         _flightContext.NoAtcAvailable = !routing.HasAtc;
         _flightContext.CurrentFrequency = routing.FrequencyMhz?.ToString("F3");
 
-        var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
         var userConfig = UserConfigStore.Load();
-        var voiceProfiles = VoiceProfileLoader.LoadProfiles();
-        _voiceProfileManager = new VoiceProfileManager(voiceConfig, voiceProfiles);
-        _voiceEngine = await CreateVoiceEngineAsync(voiceConfig, userConfig);
-        _voiceOverride = Environment.GetEnvironmentVariable("AEROAI_VOICE_PROFILE");
+        _voiceEngine = await CreateVoiceEngineAsync(userConfig);
 
         var atcGenerator = CreateAtcResponseGenerator(userConfig);
         _llmSession = new AeroAiLlmSession(atcGenerator, _flightContext, OnDebug);
@@ -206,20 +200,14 @@ public class AtcService : IDisposable
         OnFlightContextUpdated?.Invoke(_flightContext);
     }
 
-    private async Task<IAtcVoiceEngine> CreateVoiceEngineAsync(VoiceConfig voiceConfig, UserConfig userConfig)
+    private async Task<IAtcVoiceEngine> CreateVoiceEngineAsync(UserConfig userConfig)
     {
         var voiceLabEnabled = userConfig.Tts?.VoiceLabEnabled ?? true;
         var voiceLabClient = new VoiceLabTtsClient(_httpClient, userConfig, OnDebug);
-        var openAiFallback = voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey)
-            ? new OpenAiAudioVoiceEngine(voiceConfig, _httpClient)
-            : null;
         OnDebug?.Invoke($"VoiceLab config: enabled={voiceLabEnabled}, baseUrl={userConfig.Tts?.VoiceLabBaseUrl ?? "http://127.0.0.1:8008"}");
-        OnDebug?.Invoke($"OpenAI TTS fallback: enabled={(openAiFallback != null)}");
         var voiceLab = new VoiceLabAudioVoiceEngine(
             voiceLabClient,
             () => _flightContext,
-            () => _connectedControllerRole,
-            openAiFallback,
             msg => OnTtsNotice?.Invoke(msg),
             msg => OnDebug?.Invoke(msg));
         if (voiceLabEnabled)
@@ -242,14 +230,7 @@ public class AtcService : IDisposable
         }
 
         OnDebug?.Invoke("VoiceLab disabled in settings.");
-
-        if (openAiFallback != null)
-        {
-            OnDebug?.Invoke("VoiceLab unavailable. Falling back to OpenAI TTS.");
-            return openAiFallback;
-        }
-
-        OnDebug?.Invoke("TTS disabled (VoiceLab unavailable and no OpenAI API key).");
+        OnDebug?.Invoke("TTS disabled (VoiceLab disabled).");
         return new NullVoiceEngine();
     }
 
@@ -309,12 +290,7 @@ public class AtcService : IDisposable
     public bool HasAnyTtsProvider()
     {
         var userConfig = UserConfigStore.Load();
-        var voiceLabEnabled = userConfig.Tts?.VoiceLabEnabled ?? true;
-        if (voiceLabEnabled)
-            return true;
-
-        var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
-        return voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey);
+        return userConfig.Tts?.VoiceLabEnabled ?? true;
     }
 
     public async Task<bool> TestSpeakAsync(string text, CancellationToken ct = default)
@@ -324,15 +300,18 @@ public class AtcService : IDisposable
 
         if (_voiceEngine == null || _voiceEngine is NullVoiceEngine)
         {
-            var voiceConfig = VoiceConfigLoader.LoadFromEnvironment();
             var userConfig = UserConfigStore.Load();
-            _voiceEngine = await CreateVoiceEngineAsync(voiceConfig, userConfig);
+            _voiceEngine = await CreateVoiceEngineAsync(userConfig);
         }
 
         if (_voiceEngine is NullVoiceEngine)
             return false;
 
-        await _voiceEngine.SpeakAsync(text, profile: null, cancellationToken: ct);
+        await _voiceEngine.SpeakAsync(
+            text,
+            role: ResolveTtsRole(),
+            facilityIcao: ResolveFacilityIcao(),
+            cancellationToken: ct);
         return true;
     }
 
@@ -575,17 +554,17 @@ public class AtcService : IDisposable
                 OnFlightContextUpdated?.Invoke(_flightContext);
 
             // Read it out after showing it in the UI
-            if (_voiceEngine != null && _voiceProfileManager != null)
+            if (_voiceEngine != null)
             {
-                var controllerRole = _flightContext.CurrentAtcUnit.ToString().ToUpperInvariant();
-                var profile = _voiceProfileManager.GetProfileFor(
-                    _flightContext.OriginIcao, controllerRole, _voiceOverride);
                 var speakText = NormalizeForSpeech(response);
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        await _voiceEngine.SpeakAsync(speakText, profile);
+                        await _voiceEngine.SpeakAsync(
+                            speakText,
+                            role: ResolveTtsRole(),
+                            facilityIcao: ResolveFacilityIcao());
                     }
                     catch (Exception ex)
                     {
@@ -618,16 +597,54 @@ public class AtcService : IDisposable
         return $"{cs}, say again.";
     }
 
+    private string? ResolveTtsRole()
+    {
+        if (!string.IsNullOrWhiteSpace(_connectedControllerRole))
+            return _connectedControllerRole;
+        if (_flightContext == null)
+            return null;
+
+        return _flightContext.CurrentAtcUnit switch
+        {
+            AtcUnit.ClearanceDelivery => "delivery",
+            AtcUnit.Ground => "ground",
+            AtcUnit.Tower => "tower",
+            AtcUnit.Departure => "departure",
+            AtcUnit.Center => "center",
+            AtcUnit.Arrival => "approach",
+            AtcUnit.Approach => "approach",
+            _ => "delivery"
+        };
+    }
+
+    private string? ResolveFacilityIcao()
+    {
+        if (_flightContext == null)
+            return null;
+
+        bool useDestination = _flightContext.CurrentPhase is FlightPhase.Descent_Arrival
+            or FlightPhase.Approach
+            or FlightPhase.Landing
+            or FlightPhase.Taxi_In
+            or FlightPhase.Complete;
+
+        var icao = useDestination ? _flightContext.DestinationIcao : _flightContext.OriginIcao;
+        if (string.IsNullOrWhiteSpace(icao))
+            icao = useDestination ? _flightContext.OriginIcao : _flightContext.DestinationIcao;
+        return string.IsNullOrWhiteSpace(icao) ? null : icao.Trim().ToUpperInvariant();
+    }
+
     public Task SpeakAtcAsync(string text, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(text) || _voiceEngine == null || _voiceProfileManager == null || _flightContext == null)
+        if (string.IsNullOrWhiteSpace(text) || _voiceEngine == null || _flightContext == null)
             return Task.CompletedTask;
 
-        var controllerRole = _flightContext.CurrentAtcUnit.ToString().ToUpperInvariant();
-        var profile = _voiceProfileManager.GetProfileFor(
-            _flightContext.OriginIcao, controllerRole, _voiceOverride);
         var speakText = NormalizeForSpeech(text);
-        return _voiceEngine.SpeakAsync(speakText, profile, cancellationToken);
+        return _voiceEngine.SpeakAsync(
+            speakText,
+            role: ResolveTtsRole(),
+            facilityIcao: ResolveFacilityIcao(),
+            cancellationToken: cancellationToken);
     }
 
     public string GetCurrentStation()

@@ -4,12 +4,6 @@
   "description": "Neutral British English male voice with even pacing.",
   "language": "en-GB",
   "gender": "male",
-  "roles": [
-    "delivery",
-    "ground",
-    "tower",
-    "approach"
-  ],
   "tags": [
     "british",
     "neutral",
