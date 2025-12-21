@@ -12,13 +12,15 @@ internal sealed class WhisperFastSttService : ISttService, IDisposable
     private readonly WhisperFastHost _host;
     private readonly HttpClient _httpClient = new();
     private readonly Action<string>? _log;
+    private readonly Func<string?>? _initialPromptProvider;
     public bool IsAvailable { get; }
 
-    public WhisperFastSttService(WhisperFastHost host, Action<string>? log = null, bool available = true)
+    public WhisperFastSttService(WhisperFastHost host, Action<string>? log = null, bool available = true, Func<string?>? initialPromptProvider = null)
     {
         _host = host;
         _log = log;
         IsAvailable = available;
+        _initialPromptProvider = initialPromptProvider;
     }
 
     public async Task<string?> TranscribeAsync(string wavPath, CancellationToken cancellationToken)
@@ -27,10 +29,10 @@ internal sealed class WhisperFastSttService : ISttService, IDisposable
         if (!started)
             throw new InvalidOperationException("whisper-fast not available");
 
-        var request = new
-        {
-            wavPath = wavPath
-        };
+        var initialPrompt = _initialPromptProvider?.Invoke();
+        object request = string.IsNullOrWhiteSpace(initialPrompt)
+            ? new { wavPath }
+            : new { wavPath, initialPrompt };
         var json = JsonSerializer.Serialize(request);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var resp = await _httpClient.PostAsync($"http://127.0.0.1:{_host.Port}/transcribe", content, cancellationToken).ConfigureAwait(false);

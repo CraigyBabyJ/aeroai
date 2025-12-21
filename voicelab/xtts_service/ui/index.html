@@ -149,13 +149,19 @@
           <p class="eyebrow">Cache</p>
           <h2>Recent items</h2>
         </div>
-        <div class="inline-actions">
+        <div class="inline-actions cache-controls">
+          <label class="toggle">
+            <input id="cache-toggle" type="checkbox" checked>
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span class="toggle-label">Cache enabled</span>
+          </label>
+          <span id="cache-toggle-status" class="toggle-status"></span>
           <button id="clear-cache" class="danger ghost">Clear cache</button>
         </div>
       </div>
       <div id="recent-list" class="recent"></div>
     </section>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>

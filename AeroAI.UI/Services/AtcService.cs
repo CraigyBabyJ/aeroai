@@ -118,6 +118,7 @@ public class AtcService : IDisposable
             OriginName = ofp.OriginName,
             DestinationIcao = ofp.DestinationIcao,
             DestinationName = ofp.DestinationName,
+            AlternateIcao = string.IsNullOrWhiteSpace(ofp.AlternateIcao) ? null : ofp.AlternateIcao,
             OriginWeather = originWeather,
             DestinationWeather = destinationWeather,
             DepartureAtisLetter = originAtis.AtisLetter,
@@ -208,40 +209,39 @@ public class AtcService : IDisposable
     private async Task<IAtcVoiceEngine> CreateVoiceEngineAsync(VoiceConfig voiceConfig, UserConfig userConfig)
     {
         var voiceLabEnabled = userConfig.Tts?.VoiceLabEnabled ?? true;
-        var voiceLabClient = new VoiceLabTtsClient(_httpClient, userConfig);
+        var voiceLabClient = new VoiceLabTtsClient(_httpClient, userConfig, OnDebug);
         var openAiFallback = voiceConfig.Enabled && !string.IsNullOrWhiteSpace(voiceConfig.ApiKey)
             ? new OpenAiAudioVoiceEngine(voiceConfig, _httpClient)
             : null;
+        OnDebug?.Invoke($"VoiceLab config: enabled={voiceLabEnabled}, baseUrl={userConfig.Tts?.VoiceLabBaseUrl ?? "http://127.0.0.1:8008"}");
+        OnDebug?.Invoke($"OpenAI TTS fallback: enabled={(openAiFallback != null)}");
         var voiceLab = new VoiceLabAudioVoiceEngine(
             voiceLabClient,
             () => _flightContext,
             () => _connectedControllerRole,
             openAiFallback,
-            msg => OnTtsNotice?.Invoke(msg));
-        bool voiceLabReady = false;
+            msg => OnTtsNotice?.Invoke(msg),
+            msg => OnDebug?.Invoke(msg));
         if (voiceLabEnabled)
         {
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-                voiceLabReady = (await voiceLabClient.HealthAsync(cts.Token)).Online;
+                var health = await voiceLabClient.HealthAsync(cts.Token);
+                var ready = health.Online;
+                OnDebug?.Invoke(ready
+                    ? "VoiceLab TTS connected (primary)."
+                    : $"VoiceLab enabled but offline. Detail={health.Detail ?? "none"}. Will fallback per request.");
             }
             catch
             {
-                voiceLabReady = false;
+                OnDebug?.Invoke("VoiceLab enabled but health check failed. Will fallback per request.");
             }
-        }
 
-        if (voiceLabReady)
-        {
-            OnDebug?.Invoke("VoiceLab TTS connected (primary).");
             return voiceLab;
         }
 
-        if (!voiceLabEnabled)
-        {
-            OnDebug?.Invoke("VoiceLab disabled in settings.");
-        }
+        OnDebug?.Invoke("VoiceLab disabled in settings.");
 
         if (openAiFallback != null)
         {
@@ -580,8 +580,6 @@ public class AtcService : IDisposable
                 var controllerRole = _flightContext.CurrentAtcUnit.ToString().ToUpperInvariant();
                 var profile = _voiceProfileManager.GetProfileFor(
                     _flightContext.OriginIcao, controllerRole, _voiceOverride);
-                OnDebug?.Invoke($"Voice profile: {profile?.Id ?? "null"} ({profile?.DisplayName ?? "none"}), controller={controllerRole}, origin={_flightContext.OriginIcao}, override={_voiceOverride ?? "none"}, voice={profile?.TtsVoice ?? "default"}, model={profile?.TtsModel ?? "default"}, styleHint={(profile?.StyleHint ?? "none")}");
-                
                 var speakText = NormalizeForSpeech(response);
                 _ = Task.Run(async () =>
                 {
@@ -628,8 +626,6 @@ public class AtcService : IDisposable
         var controllerRole = _flightContext.CurrentAtcUnit.ToString().ToUpperInvariant();
         var profile = _voiceProfileManager.GetProfileFor(
             _flightContext.OriginIcao, controllerRole, _voiceOverride);
-        OnDebug?.Invoke($"Voice profile (manual): {profile?.Id ?? "null"} ({profile?.DisplayName ?? "none"}), controller={controllerRole}, origin={_flightContext.OriginIcao}, override={_voiceOverride ?? "none"}");
-
         var speakText = NormalizeForSpeech(text);
         return _voiceEngine.SpeakAsync(speakText, profile, cancellationToken);
     }

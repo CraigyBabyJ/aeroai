@@ -99,7 +99,7 @@ public partial class MainWindow : Window
         if (!_sttService.IsAvailable)
         {
             PttButton.IsEnabled = false;
-            AddSystemMessage("Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models");
+            AddSystemMessage(BuildSttUnavailableMessage());
         }
     }
 
@@ -220,7 +220,7 @@ public partial class MainWindow : Window
 
     private FrequencyOption? ChooseDefaultFrequency()
     {
-        var order = new[] { "Clearance", "Ground", "Tower", "Departure", "Approach" };
+        var order = new[] { "Delivery", "Ground", "Tower", "Departure", "Approach" };
         foreach (var role in order)
         {
             var match = _frequencyOptions.FirstOrDefault(option =>
@@ -412,8 +412,8 @@ public partial class MainWindow : Window
         var trimmed = role.Trim().ToLowerInvariant();
         return trimmed switch
         {
-            "delivery" => "Clearance",
-            "clearance" => "Clearance",
+            "delivery" => "Delivery",
+            "clearance" => "Delivery",
             "ground" => "Ground",
             "tower" => "Tower",
             "departure" => "Departure",
@@ -428,8 +428,8 @@ public partial class MainWindow : Window
         var trimmed = role.Trim().ToLowerInvariant();
         return trimmed switch
         {
-            "delivery" => "clearance",
-            "clearance" => "clearance",
+            "delivery" => "delivery",
+            "clearance" => "delivery",
             "ground" => "ground",
             "tower" => "tower",
             "departure" => "departure",
@@ -497,6 +497,73 @@ public partial class MainWindow : Window
     {
         var trimmed = value.Trim();
         return Regex.Replace(trimmed, "\\s+", " ");
+    }
+
+    private string? BuildSttInitialPrompt()
+    {
+        var flight = _atcService.CurrentFlight;
+        if (flight == null)
+            return null;
+
+        var parts = new List<string>();
+        var airports = new List<string>();
+
+        var originName = AirportNameResolver.ResolveAirportName(flight.OriginIcao, flight);
+        var originLabel = BuildAirportLabel(flight.OriginIcao, originName);
+        if (!string.IsNullOrWhiteSpace(originLabel))
+            airports.Add(originLabel);
+
+        var destName = AirportNameResolver.ResolveAirportName(flight.DestinationIcao, flight);
+        var destLabel = BuildAirportLabel(flight.DestinationIcao, destName);
+        if (!string.IsNullOrWhiteSpace(destLabel))
+            airports.Add(destLabel);
+
+        if (airports.Count > 0)
+            parts.Add($"Airports: {string.Join(", ", airports)}");
+
+        var waypoints = flight.EnrouteRoute?.WaypointIdentifiers;
+        if (waypoints != null && waypoints.Count > 0)
+        {
+            var routeFixes = waypoints
+                .Where(w => !string.IsNullOrWhiteSpace(w))
+                .Select(w => w.Trim().ToUpperInvariant())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .ToList();
+            if (routeFixes.Count > 0)
+                parts.Add($"Route fixes: {string.Join(", ", routeFixes)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(flight.SelectedSID))
+            parts.Add($"SID: {flight.SelectedSID}");
+        if (!string.IsNullOrWhiteSpace(flight.SelectedSTAR))
+            parts.Add($"STAR: {flight.SelectedSTAR}");
+        if (!string.IsNullOrWhiteSpace(flight.SelectedDepartureRunway))
+            parts.Add($"Departure runway: {flight.SelectedDepartureRunway}");
+        if (!string.IsNullOrWhiteSpace(flight.SelectedArrivalRunway))
+            parts.Add($"Arrival runway: {flight.SelectedArrivalRunway}");
+
+        if (parts.Count == 0)
+            return null;
+
+        var prompt = CollapseWhitespace(string.Join(". ", parts));
+        return prompt.Length > 500 ? prompt.Substring(0, 500) : prompt;
+    }
+
+    private static string? BuildAirportLabel(string? icao, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(icao))
+            return null;
+
+        var trimmedIcao = icao.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(name))
+            return trimmedIcao;
+
+        var trimmedName = name.Trim();
+        if (string.Equals(trimmedName, trimmedIcao, StringComparison.OrdinalIgnoreCase))
+            return trimmedIcao;
+
+        return $"{trimmedName} ({trimmedIcao})";
     }
 
     private static string ToAtisPhonetic(string atisLetter)
@@ -612,7 +679,7 @@ public partial class MainWindow : Window
 
         if (!_sttService.IsAvailable)
         {
-            AddSystemMessage("Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models");
+            AddSystemMessage(BuildSttUnavailableMessage());
             return;
         }
 
@@ -622,13 +689,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_recorder.IsRecording)
+        {
+            AddSystemMessage("Microphone is already active. Stop the mic test before using push-to-talk.");
+            return;
+        }
+
         try
         {
+            PttButton?.CaptureMouse();
             _recorder.StartRecording();
             SetPushToTalkRecording();
         }
         catch (Exception ex)
         {
+            PttButton?.ReleaseMouseCapture();
             ResetPushToTalkUi();
             AddSystemMessage($"Microphone error: {ex.Message}");
         }
@@ -668,11 +743,12 @@ public partial class MainWindow : Window
             }
             else
             {
-                // Apply STT corrections first, then use centralized normalizer
+                // Apply STT corrections first, then SimBrief name corrections, then normalize.
                 var corrected = _sttCorrectionLayer.Apply(transcript);
                 var flight = _atcService.CurrentFlight;
                 if (flight != null)
                 {
+                    corrected = SimBriefSttCorrector.Apply(corrected, flight, _sttDebugLog, _debugEnabled);
                     var normalized = PilotTransmissionNormalizer.Normalize(corrected, flight, enableDebugLogging: _debugEnabled);
                     AddSystemMessage($"Heard: \"{corrected}\"");
                     await ProcessPilotInputAsync(normalized);
@@ -695,6 +771,7 @@ public partial class MainWindow : Window
         finally
         {
             _isTranscribing = false;
+            PttButton?.ReleaseMouseCapture();
             ResetPushToTalkUi();
         }
     }
@@ -1016,14 +1093,29 @@ public partial class MainWindow : Window
         var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? "whisper").Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(backend))
             backend = "whisper";
+        _sttDebugLog?.Invoke($"[STT] configured backend={backend}");
 
         var whisperCli = new WhisperSttService();
         ISttService? whisperFast = null;
 
         if (backend == "whisper-fast")
         {
-            var python = Environment.GetEnvironmentVariable("WHISPER_FAST_PYTHON")
-                         ?? ResolveUpwards("whisper-fast\\venv\\Scripts\\python.exe");
+            var python = Environment.GetEnvironmentVariable("WHISPER_FAST_PYTHON");
+            if (string.IsNullOrWhiteSpace(python))
+            {
+                python = ResolveUpwards("whisper-fast\\venv311\\Scripts\\python.exe");
+                if (!File.Exists(python))
+                    python = ResolveUpwards("whisper-fast\\venv\\Scripts\\python.exe");
+                if (IsBrokenWhisperFastVenv(python))
+                {
+                    _sttDebugLog?.Invoke("[STT] whisper-fast venv missing pyvenv.cfg; using system python from PATH (set WHISPER_FAST_PYTHON to override).");
+                    python = "python";
+                }
+            }
+            else if (!LooksLikeCommandName(python) && !Path.IsPathRooted(python))
+            {
+                python = ResolveUpwards(python);
+            }
             var serverPath = ResolveUpwards("whisper-fast\\service.py");
             var model = Environment.GetEnvironmentVariable("WHISPER_FAST_MODEL")
                         ?? "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper";
@@ -1031,8 +1123,12 @@ public partial class MainWindow : Window
             var port = 8765;
             if (!string.IsNullOrWhiteSpace(portEnv) && int.TryParse(portEnv, out var parsedPort) && parsedPort > 0)
                 port = parsedPort;
+            var device = Environment.GetEnvironmentVariable("WHISPER_FAST_DEVICE") ?? "auto";
+            var compute = Environment.GetEnvironmentVariable("WHISPER_FAST_COMPUTE_TYPE") ?? "auto";
+            var dllDirs = Environment.GetEnvironmentVariable("WHISPER_FAST_DLL_DIRS") ?? "none";
+            _sttDebugLog?.Invoke($"[STT] whisper-fast config: python=\"{python}\", server=\"{serverPath}\", model=\"{model}\", port={port}, device={device}, compute={compute}, dll_dirs=\"{dllDirs}\"");
 
-            if (!string.IsNullOrWhiteSpace(python) && File.Exists(python) && !string.IsNullOrWhiteSpace(serverPath) && File.Exists(serverPath))
+            if (IsExecutableCandidate(python) && !string.IsNullOrWhiteSpace(serverPath) && File.Exists(serverPath))
             {
                 var host = new WhisperFastHost(python, serverPath, model, port, _sttDebugLog);
                 // Start asynchronously at launch; failures will be logged and per-request fallback will use whisper-cli.
@@ -1041,7 +1137,11 @@ public partial class MainWindow : Window
                     using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
                     await host.StartAsync(cts.Token);
                 });
-                whisperFast = new WhisperFastSttService(host, _sttDebugLog, available: true);
+                whisperFast = new WhisperFastSttService(
+                    host,
+                    _sttDebugLog,
+                    available: true,
+                    initialPromptProvider: BuildSttInitialPrompt);
             }
             else
             {
@@ -1108,6 +1208,49 @@ public partial class MainWindow : Window
         }
 
         return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, relativePath));
+    }
+
+    private static string BuildSttUnavailableMessage()
+    {
+        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? "whisper").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(backend))
+            backend = "whisper";
+        return backend == "whisper-fast"
+            ? "Whisper-fast not available. Check WHISPER_FAST_PYTHON, model, and the whisper-fast service."
+            : "Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models";
+    }
+
+    private static bool IsExecutableCandidate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+        if (LooksLikeCommandName(value))
+            return true;
+        return File.Exists(value);
+    }
+
+    private static bool LooksLikeCommandName(string value)
+    {
+        return !Path.IsPathRooted(value)
+               && value.IndexOf(Path.DirectorySeparatorChar) < 0
+               && value.IndexOf(Path.AltDirectorySeparatorChar) < 0;
+    }
+
+    private static bool IsBrokenWhisperFastVenv(string? pythonPath)
+    {
+        if (string.IsNullOrWhiteSpace(pythonPath) || !File.Exists(pythonPath))
+            return false;
+
+        var scriptsDir = Path.GetDirectoryName(pythonPath);
+        if (string.IsNullOrWhiteSpace(scriptsDir) || !string.Equals(Path.GetFileName(scriptsDir), "Scripts", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var venvRoot = Path.GetDirectoryName(scriptsDir);
+        if (string.IsNullOrWhiteSpace(venvRoot) || !string.Equals(Path.GetFileName(venvRoot), "venv", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var cfgPath = Path.Combine(venvRoot, "pyvenv.cfg");
+        return !File.Exists(cfgPath);
     }
 
     private void DebugToggle_Checked(object sender, RoutedEventArgs e) => _debugEnabled = true;

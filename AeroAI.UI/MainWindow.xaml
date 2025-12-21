@@ -289,9 +289,16 @@
                         <ComboBox x:Name="ConnectedToCombo"
                                   MinWidth="180"
                                   Background="#1f2b40"
-                                  Foreground="{StaticResource TextPrimaryBrush}"
+                                  Foreground="Black"
                                   BorderThickness="0"
-                                  SelectionChanged="ConnectedToCombo_SelectionChanged"/>
+                                  SelectionChanged="ConnectedToCombo_SelectionChanged">
+                            <ComboBox.ItemContainerStyle>
+                                <Style TargetType="ComboBoxItem">
+                                    <Setter Property="Foreground" Value="Black"/>
+                                    <Setter Property="Background" Value="White"/>
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                             <TextBlock x:Name="NextControllerHint"
                                        Foreground="{StaticResource TextSecondaryBrush}"
@@ -350,7 +357,7 @@
                             <RowDefinition/>
                         </Grid.RowDefinitions>
                         
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="CLR" Foreground="{StaticResource TextSecondaryBrush}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="DEL" Foreground="{StaticResource TextSecondaryBrush}"/>
                         <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ClrFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
                         <TextBlock Grid.Row="0" Grid.Column="2" Text="GND" Foreground="{StaticResource TextSecondaryBrush}" Margin="20,0,0,0"/>
                         <TextBlock Grid.Row="0" Grid.Column="3" x:Name="GndFreq" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontWeight="Bold"/>
@@ -461,11 +468,13 @@
                                             <TextBlock Text="{Binding Station}" 
                                                        Foreground="{StaticResource TextSecondaryBrush}"
                                                        FontSize="12" FontWeight="SemiBold" />
-                                            <TextBlock Text="{Binding Message}" 
-                                                       Foreground="{Binding MessageColor}"
-                                                       Background="Transparent"
-                                                       TextWrapping="Wrap"
-                                                       Margin="0,2,0,0"/>
+                                            <TextBox Text="{Binding Message}"
+                                                     Foreground="{Binding MessageColor}"
+                                                     Background="Transparent"
+                                                     BorderThickness="0"
+                                                     IsReadOnly="True"
+                                                     TextWrapping="Wrap"
+                                                     Margin="0,2,0,0"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>

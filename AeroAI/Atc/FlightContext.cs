@@ -26,9 +26,11 @@ public class FlightContext
 
 	public string DestinationIcao { get; set; } = string.Empty;
 
-	public string DestinationName { get; set; } = string.Empty;
+        public string DestinationName { get; set; } = string.Empty;
 
-	public EnrouteRoute? EnrouteRoute { get; set; }
+        public string? AlternateIcao { get; set; }
+
+        public EnrouteRoute? EnrouteRoute { get; set; }
 
 	public WeatherInfo? OriginWeather { get; set; } = null;
 
@@ -132,7 +134,8 @@ public class FlightContext
 		CanonicalCallsign = string.Empty;
 		RadioCallsign = string.Empty;
 		OriginName = string.Empty;
-		DestinationName = string.Empty;
+                DestinationName = string.Empty;
+                AlternateIcao = null;
 		DepartureAtisLetter = null;
 		Stand = null;
 		CurrentPhase = FlightPhase.Preflight_Clearance;

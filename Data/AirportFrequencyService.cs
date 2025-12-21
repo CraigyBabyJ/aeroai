@@ -23,7 +23,7 @@ public static class AirportFrequencyService
             return Array.Empty<ControllerFrequency>();
 
         var list = new List<ControllerFrequency>();
-        Add(list, "Clearance", freqs.Clearance);
+        Add(list, "Delivery", freqs.Clearance);
         Add(list, "Ground", freqs.Ground);
         Add(list, "Tower", freqs.Tower);
         Add(list, "Departure", freqs.Departure);

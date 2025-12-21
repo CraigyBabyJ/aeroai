@@ -18,19 +18,22 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
     private readonly Func<string?>? _getConnectedRole;
     private readonly IAtcVoiceEngine? _fallback;
     private readonly Action<string>? _onStatus;
+    private readonly Action<string>? _onDebug;
 
     public VoiceLabAudioVoiceEngine(
         ITtsClient client,
         Func<FlightContext?> getFlightContext,
         Func<string?>? getConnectedRole = null,
         IAtcVoiceEngine? fallback = null,
-        Action<string>? onStatus = null)
+        Action<string>? onStatus = null,
+        Action<string>? onDebug = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _getFlightContext = getFlightContext ?? throw new ArgumentNullException(nameof(getFlightContext));
         _getConnectedRole = getConnectedRole;
         _fallback = fallback;
         _onStatus = onStatus;
+        _onDebug = onDebug;
     }
 
     public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default)
@@ -75,6 +78,7 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
         }
         catch (Exception ex) when (ShouldRetryWithAuto(ex) && !string.Equals(voiceId, "auto", StringComparison.OrdinalIgnoreCase))
         {
+            _onDebug?.Invoke($"[VoiceLab] voice_id '{voiceId}' failed, retrying with auto: {ex.Message}");
             var fallbackRequest = new TtsRequest
             {
                 Text = text,
@@ -116,6 +120,7 @@ public sealed class VoiceLabAudioVoiceEngine : IAtcVoiceEngine
 
     private async Task HandleFailureAsync(string text, VoiceProfile? profile, CancellationToken cancellationToken, Exception ex)
     {
+        _onDebug?.Invoke($"[VoiceLab] error: {ex.GetType().Name}: {ex.Message}");
         if (_fallback != null)
         {
             _onStatus?.Invoke("VoiceLab unavailable. Falling back to OpenAI TTS.");

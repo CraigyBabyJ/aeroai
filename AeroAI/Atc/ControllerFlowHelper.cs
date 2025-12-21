@@ -41,7 +41,7 @@ public static class ControllerFlowHelper
     {
         return unit switch
         {
-            AtcUnit.ClearanceDelivery => "Clearance",
+            AtcUnit.ClearanceDelivery => "Delivery",
             AtcUnit.Ground => "Ground",
             AtcUnit.Tower => "Tower",
             AtcUnit.Departure => "Departure",

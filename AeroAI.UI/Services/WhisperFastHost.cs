@@ -48,11 +48,33 @@ internal sealed class WhisperFastHost : IDisposable
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        psi.Environment["PYTHONUNBUFFERED"] = "1";
+        AppendWhisperFastDllPaths(psi);
+        psi.ArgumentList.Add("-u");
         psi.ArgumentList.Add(_serverPath);
         psi.ArgumentList.Add("--port");
         psi.ArgumentList.Add(Port.ToString());
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(_modelName);
+
+        var device = Environment.GetEnvironmentVariable("WHISPER_FAST_DEVICE");
+        if (!string.IsNullOrWhiteSpace(device))
+        {
+            psi.ArgumentList.Add("--device");
+            psi.ArgumentList.Add(device.Trim());
+            if (string.Equals(device.Trim(), "cpu", StringComparison.OrdinalIgnoreCase))
+            {
+                psi.Environment["CTRANSLATE2_FORCE_CPU"] = "1";
+                psi.Environment["CUDA_VISIBLE_DEVICES"] = "";
+            }
+        }
+
+        var computeType = Environment.GetEnvironmentVariable("WHISPER_FAST_COMPUTE_TYPE");
+        if (!string.IsNullOrWhiteSpace(computeType))
+        {
+            psi.ArgumentList.Add("--compute-type");
+            psi.ArgumentList.Add(computeType.Trim());
+        }
 
         try
         {
@@ -62,6 +84,7 @@ internal sealed class WhisperFastHost : IDisposable
                 _log?.Invoke("[STT] failed to start whisper-fast process (null)");
                 return false;
             }
+            AttachOutputHandlers(_process);
         }
         catch (Exception ex)
         {
@@ -109,6 +132,59 @@ internal sealed class WhisperFastHost : IDisposable
 
         _log?.Invoke("[STT] whisper-fast healthcheck failed");
         return false;
+    }
+
+    private void AttachOutputHandlers(Process process)
+    {
+        process.EnableRaisingEvents = true;
+        process.OutputDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _log?.Invoke($"[STT] whisper-fast: {e.Data}");
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(e.Data))
+                _log?.Invoke($"[STT] whisper-fast error: {e.Data}");
+        };
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+    }
+
+    private void AppendWhisperFastDllPaths(ProcessStartInfo psi)
+    {
+        var serverDir = Path.GetDirectoryName(_serverPath);
+        var pythonDir = Path.GetDirectoryName(_pythonPath);
+        var venvRoot = pythonDir != null ? Directory.GetParent(pythonDir)?.FullName : null;
+        var cudnnBin = venvRoot != null ? Path.Combine(venvRoot, "Lib", "site-packages", "nvidia", "cudnn", "bin") : null;
+        var cublasBin = venvRoot != null ? Path.Combine(venvRoot, "Lib", "site-packages", "nvidia", "cublas", "bin") : null;
+        var cu13Bin = venvRoot != null ? Path.Combine(venvRoot, "Lib", "site-packages", "nvidia", "cu13", "bin", "x86_64") : null;
+        var extraFromEnv = Environment.GetEnvironmentVariable("WHISPER_FAST_DLL_DIRS");
+        var extraDirs = SplitPaths(extraFromEnv);
+
+        var allDirs = new[]
+        {
+            serverDir,
+            pythonDir,
+            cudnnBin,
+            cublasBin,
+            cu13Bin
+        }.Concat(extraDirs).Where(d => !string.IsNullOrWhiteSpace(d) && Directory.Exists(d)).ToArray();
+
+        if (allDirs.Length == 0)
+            return;
+
+        var existing = psi.Environment["PATH"] ?? Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        var combined = string.Join(Path.PathSeparator, allDirs) + Path.PathSeparator + existing;
+        psi.Environment["PATH"] = combined;
+        _log?.Invoke($"[STT] whisper-fast PATH extended with: {string.Join(", ", allDirs)}");
+    }
+
+    private static string[] SplitPaths(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Array.Empty<string>();
+        return value.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
     public void Stop()

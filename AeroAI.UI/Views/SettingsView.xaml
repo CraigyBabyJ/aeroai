@@ -38,13 +38,24 @@
                     <TextBlock Text="Input Device" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ComboBox ItemsSource="{Binding MicrophoneDevices}"
                               SelectedItem="{Binding SelectedMicrophone, Mode=TwoWay}"
-                              DisplayMemberPath="Name"
                               Background="#2a2a4a"
                               Foreground="Black"
                               BorderBrush="{StaticResource BackgroundLightBrush}"
                               BorderThickness="1"
                               Padding="8,4"
-                              MaxDropDownHeight="240"/>
+                              MaxDropDownHeight="240">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" Foreground="Black"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter Property="Background" Value="White"/>
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
                     
                     <!-- Mic Gain -->
                     <Grid Margin="0,16,0,0">
@@ -107,13 +118,24 @@
                     <TextBlock Text="Output Device" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
                     <ComboBox ItemsSource="{Binding AtcOutputDevices}"
                               SelectedItem="{Binding SelectedAtcOutput, Mode=TwoWay}"
-                              DisplayMemberPath="Name"
                               Background="#2a2a4a"
                               Foreground="Black"
                               BorderBrush="{StaticResource BackgroundLightBrush}"
                               BorderThickness="1"
                               Padding="8,4"
-                              MaxDropDownHeight="240"/>
+                              MaxDropDownHeight="240">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}" Foreground="Black"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="Foreground" Value="Black"/>
+                                <Setter Property="Background" Value="White"/>
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
                     
                     <!-- ATC Volume -->
                     <Grid Margin="0,16,0,0">

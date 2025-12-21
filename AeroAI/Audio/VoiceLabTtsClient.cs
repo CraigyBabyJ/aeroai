@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using AtcNavDataDemo.Config;
@@ -17,15 +18,22 @@ public sealed class VoiceLabTtsClient : ITtsClient
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    private static readonly JsonSerializerOptions DebugJsonOptions = new()
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true
+    };
 
     private readonly HttpClient _http;
     private readonly Uri _baseUri;
+    private readonly Action<string>? _onDebug;
 
-    public VoiceLabTtsClient(HttpClient http, UserConfig userConfig)
+    public VoiceLabTtsClient(HttpClient http, UserConfig userConfig, Action<string>? onDebug = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
         if (userConfig == null)
             throw new ArgumentNullException(nameof(userConfig));
+        _onDebug = onDebug;
 
         var baseUrl = userConfig.Tts?.VoiceLabBaseUrl;
         if (string.IsNullOrWhiteSpace(baseUrl))
@@ -85,6 +93,13 @@ public sealed class VoiceLabTtsClient : ITtsClient
             IsoRegion = request.IsoRegion
         };
 
+        var radioProfile = string.IsNullOrWhiteSpace(payload.RadioProfile) ? "none" : payload.RadioProfile;
+        var radioIntensity = payload.RadioIntensity.HasValue
+            ? payload.RadioIntensity.Value.ToString("0.00", CultureInfo.InvariantCulture)
+            : "none";
+        string payloadJson = JsonSerializer.Serialize(payload, DebugJsonOptions);
+        _onDebug?.Invoke($"[VoiceLab] request: POST {new Uri(_baseUri, "tts")} (radio_profile={radioProfile}, radio_intensity={radioIntensity})\n{payloadJson}");
+
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, new Uri(_baseUri, "tts"));
         requestMessage.Content = new StringContent(JsonSerializer.Serialize(payload, JsonOptions), Encoding.UTF8, "application/json");
 
@@ -92,16 +107,22 @@ public sealed class VoiceLabTtsClient : ITtsClient
         if (!response.IsSuccessStatusCode)
         {
             var detail = await response.Content.ReadAsStringAsync(ct);
+            _onDebug?.Invoke($"[VoiceLab] response: {(int)response.StatusCode} {response.ReasonPhrase}\n{detail}");
             throw new InvalidOperationException($"VoiceLab TTS failed: {response.StatusCode} {detail}");
         }
 
         var audio = await response.Content.ReadAsByteArrayAsync(ct);
+        var resolvedVoiceId = ReadHeader(response, "X-Resolved-Voice-Id");
+        var resolvedEngine = ReadHeader(response, "X-Resolved-Engine");
+        var cacheStatus = ReadHeader(response, "X-Cache");
+        var normalized = ReadHeader(response, "X-Normalized");
+        _onDebug?.Invoke($"[VoiceLab] response: {(int)response.StatusCode} {response.ReasonPhrase}, bytes={audio.Length}, resolved_voice={resolvedVoiceId ?? "unknown"}, engine={resolvedEngine ?? "unknown"}, cache={cacheStatus ?? "unknown"}, normalized={normalized ?? "unknown"}");
         return new TtsResult
         {
             WavBytes = audio,
-            ResolvedVoiceId = ReadHeader(response, "X-Resolved-Voice-Id"),
-            ResolvedEngine = ReadHeader(response, "X-Resolved-Engine"),
-            CacheStatus = ReadHeader(response, "X-Cache")
+            ResolvedVoiceId = resolvedVoiceId,
+            ResolvedEngine = resolvedEngine,
+            CacheStatus = cacheStatus
         };
     }
 

@@ -41,9 +41,20 @@ internal sealed class SttBackendRouter : ISttService, IDisposable
             }
             catch (Exception ex)
             {
-                _log?.Invoke($"[STT] fallback to whisper-cli: {ex.GetType().Name}: {ex.Message}");
+                if (_whisperCli.IsAvailable)
+                {
+                    _log?.Invoke($"[STT] fallback to whisper-cli: {ex.GetType().Name}: {ex.Message}");
+                }
+                else
+                {
+                    _log?.Invoke($"[STT] whisper-fast failed and whisper-cli unavailable: {ex.GetType().Name}: {ex.Message}");
+                    throw new InvalidOperationException($"whisper-fast failed: {ex.Message}. whisper-cli not available.");
+                }
             }
         }
+
+        if (!_whisperCli.IsAvailable)
+            throw new InvalidOperationException("whisper-cli not available.");
 
         _log?.Invoke("[STT] backend=whisper");
         return await _whisperCli.TranscribeAsync(wavPath, cancellationToken).ConfigureAwait(false);

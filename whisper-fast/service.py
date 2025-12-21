@@ -11,6 +11,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--model", type=str, default="jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper")
+    parser.add_argument("--device", type=str, default=os.getenv("WHISPER_FAST_DEVICE", "auto"))
+    parser.add_argument("--compute-type", type=str, default=os.getenv("WHISPER_FAST_COMPUTE_TYPE", "auto"))
     return parser.parse_args()
 
 
@@ -71,19 +73,22 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         wav_path = payload.get("wavPath")
+        initial_prompt = payload.get("initialPrompt")
         if not wav_path or not os.path.exists(wav_path):
             self._json(400, {"ok": False, "error": "missing or invalid wavPath"})
             return
 
         try:
-            segments, info = self.model.transcribe(
-                wav_path,
+            options = dict(
                 language="en",
                 beam_size=1,
                 best_of=1,
                 vad_filter=True,
                 condition_on_previous_text=False,
             )
+            if isinstance(initial_prompt, str) and initial_prompt.strip():
+                options["initial_prompt"] = initial_prompt.strip()
+            segments, info = self.model.transcribe(wav_path, **options)
             text_parts = [seg.text.strip() for seg in segments if seg.text]
             transcript = " ".join(text_parts).strip()
             self._json(200, {"ok": True, "text": transcript, "language": info.language or "en"})
@@ -93,14 +98,16 @@ class Handler(BaseHTTPRequestHandler):
             # Try CPU fallback once if we were on CUDA
             if Handler.model_device == "cuda" and self._load_cpu_fallback():
                 try:
-                    segments, info = self.model.transcribe(
-                        wav_path,
+                    options = dict(
                         language="en",
                         beam_size=1,
                         best_of=1,
                         vad_filter=True,
                         condition_on_previous_text=False,
                     )
+                    if isinstance(initial_prompt, str) and initial_prompt.strip():
+                        options["initial_prompt"] = initial_prompt.strip()
+                    segments, info = self.model.transcribe(wav_path, **options)
                     text_parts = [seg.text.strip() for seg in segments if seg.text]
                     transcript = " ".join(text_parts).strip()
                     self._json(200, {"ok": True, "text": transcript, "language": info.language or "en", "fallback": "cpu"})
@@ -115,17 +122,32 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     args = parse_args()
     model_name = args.model
+    device = (args.device or "auto").strip().lower()
+    compute_type = (args.compute_type or "auto").strip().lower()
     print(f"[whisper-fast] loading model {model_name}")
-    try:
-        Handler.model = WhisperModel(model_name, device="cuda", compute_type="float16")
-        Handler.model_name = model_name
-        Handler.model_device = "cuda"
-        print("[whisper-fast] CUDA load successful")
-    except Exception as ex:
-        print(f"[whisper-fast] CUDA load failed ({ex}); falling back to CPU")
-        Handler.model = WhisperModel(model_name, device="cpu", compute_type="int8")
+
+    def cpu_compute():
+        return compute_type if compute_type != "auto" else "int8"
+
+    def cuda_compute():
+        return compute_type if compute_type != "auto" else "float16"
+
+    if device == "cpu":
+        Handler.model = WhisperModel(model_name, device="cpu", compute_type=cpu_compute())
         Handler.model_name = model_name + " (cpu)"
         Handler.model_device = "cpu"
+        print("[whisper-fast] CPU load forced")
+    else:
+        try:
+            Handler.model = WhisperModel(model_name, device="cuda", compute_type=cuda_compute())
+            Handler.model_name = model_name
+            Handler.model_device = "cuda"
+            print("[whisper-fast] CUDA load successful")
+        except Exception as ex:
+            print(f"[whisper-fast] CUDA load failed ({ex}); falling back to CPU")
+            Handler.model = WhisperModel(model_name, device="cpu", compute_type=cpu_compute())
+            Handler.model_name = model_name + " (cpu)"
+            Handler.model_device = "cpu"
     server = ThreadedHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"[whisper-fast] listening on 127.0.0.1:{args.port}")
     try:

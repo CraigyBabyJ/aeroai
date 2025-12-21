@@ -18,6 +18,8 @@ const refreshVoicesBtn = document.getElementById("refresh-voices");
 const refreshStatsBtn = document.getElementById("refresh-stats");
 const recentList = document.getElementById("recent-list");
 const clearCacheBtn = document.getElementById("clear-cache");
+const cacheToggle = document.getElementById("cache-toggle");
+const cacheToggleStatus = document.getElementById("cache-toggle-status");
 const player = document.getElementById("player");
 const cacheHitBadge = document.getElementById("cache-hit");
 const cacheModeBadge = document.getElementById("cache-mode");
@@ -29,6 +31,7 @@ const insertPipeBtn = document.getElementById("insert-pipe");
 const insertNewlineBtn = document.getElementById("insert-newline");
 const segmentPreview = document.getElementById("segment-preview");
 let voicesCache = [];
+let cacheEnabled = true;
 
 const PUNCT_BREAKS = new Set([".", "?", "!", ";"]);
 
@@ -166,7 +169,12 @@ async function loadHealth() {
     const engine = data.engine || {};
     document.getElementById("health-model").innerText = engine.model_version || "Unknown";
     document.getElementById("health-cuda").innerText = data.cuda_available ? "Yes" : "No";
-    document.getElementById("health-cache").innerText = `${data.cache_items} | ${formatBytes(data.cache_bytes)}`;
+    const cacheEnabledFlag = data.cache_enabled !== false;
+    const cacheLabel = cacheEnabledFlag
+      ? `${data.cache_items} | ${formatBytes(data.cache_bytes)}`
+      : `Disabled | ${data.cache_items} | ${formatBytes(data.cache_bytes)}`;
+    document.getElementById("health-cache").innerText = cacheLabel;
+    if (cacheToggle) applyCacheState(cacheEnabledFlag);
     let engineText = "Placeholder (XTTS missing)";
     if (engine.engine_error) {
       engineText = `Error: ${engine.engine_error}`;
@@ -266,6 +274,52 @@ function setStatus(el, msg, isError = false) {
   el.classList.toggle("error", isError);
 }
 
+function applyCacheState(enabled) {
+  cacheEnabled = Boolean(enabled);
+  if (cacheToggle) cacheToggle.checked = cacheEnabled;
+  if (cacheToggleStatus) {
+    cacheToggleStatus.textContent = cacheEnabled ? "Enabled" : "Disabled";
+    cacheToggleStatus.classList.remove("error");
+  }
+  if (prefetchBtn) prefetchBtn.disabled = !cacheEnabled;
+  if (clearCacheBtn) clearCacheBtn.disabled = !cacheEnabled;
+}
+
+async function loadSettings() {
+  try {
+    const data = await fetchJSON("/settings");
+    applyCacheState(data.cache_enabled !== false);
+  } catch (err) {
+    applyCacheState(true);
+    if (cacheToggleStatus) {
+      cacheToggleStatus.textContent = "Unknown";
+      cacheToggleStatus.classList.add("error");
+    }
+  }
+}
+
+async function saveSettings(enabled) {
+  if (cacheToggleStatus) {
+    cacheToggleStatus.textContent = "Saving...";
+    cacheToggleStatus.classList.remove("error");
+  }
+  try {
+    const data = await fetchJSON("/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cache_enabled: Boolean(enabled) }),
+    });
+    applyCacheState(data.cache_enabled !== false);
+    await loadHealth();
+  } catch (err) {
+    if (cacheToggleStatus) {
+      cacheToggleStatus.textContent = "Save failed";
+      cacheToggleStatus.classList.add("error");
+    }
+    if (cacheToggle) cacheToggle.checked = !enabled;
+  }
+}
+
 async function handleTts(event) {
   event.preventDefault();
   setStatus(ttsStatus, "Generating...");
@@ -285,6 +339,7 @@ async function handleTts(event) {
     role: roleSelect.value || null,
     speed: parseFloat(speedInput.value || "1") || 1.0,
     radio_profile: radioSelect.value || null,
+    cache_enabled: cacheEnabled,
     format: "wav",
     hard_pause_ms: hardPauseMs,
     soft_pause_ms: softPauseMs,
@@ -335,6 +390,10 @@ async function handleTts(event) {
 }
 
 async function handlePrefetch() {
+  if (!cacheEnabled) {
+    setStatus(prefetchStatus, "Cache disabled.", true);
+    return;
+  }
   setStatus(prefetchStatus, "Prefetching...");
   prefetchResults.innerHTML = "";
 
@@ -395,6 +454,10 @@ async function loadRecent() {
 }
 
 async function clearCache() {
+  if (!cacheEnabled) {
+    alert("Cache is disabled.");
+    return;
+  }
   if (!confirm("Clear cached audio files and index?")) return;
   try {
     await fetchJSON("/cache/clear", { method: "POST" });
@@ -432,7 +495,7 @@ if (insertPipeBtn) insertPipeBtn.addEventListener("click", () => insertAtCursor(
 if (insertNewlineBtn) insertNewlineBtn.addEventListener("click", () => insertAtCursor(textInput, "\n"));
 
 window.addEventListener("DOMContentLoaded", async () => {
-  await Promise.all([loadVoices(), loadHealth(), loadRecent()]);
+  await Promise.all([loadVoices(), loadHealth(), loadRecent(), loadSettings()]);
   textInput.value =
     "Easy one two three | radio check | wind two seven zero at one two knots";
   speedDisplay.textContent = `${parseFloat(speedInput.value).toFixed(1)}x`;
@@ -446,6 +509,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (voiceEngineFilter) {
     voiceEngineFilter.addEventListener("change", () => {
       renderVoiceOptions(voiceEngineFilter.value);
+    });
+  }
+  if (cacheToggle) {
+    cacheToggle.addEventListener("change", () => {
+      saveSettings(cacheToggle.checked);
     });
   }
 });

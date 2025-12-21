@@ -2,7 +2,7 @@
 
 ### Current behaviour
 - LLM prompt is in `prompts/aeroai_system_prompt.txt` (now includes readback-handling rules for CLEARANCE role when `state_flags.ifr_clearance_issued` is true).
-- LLM call goes through `AeroAI/Llm/AeroAiPhraseEngine.cs`; it logs system prompt, user prompt, and raw response to console every turn, and also to the file set in `AEROAI_LOG_FILE` (if the env var is present).
+- LLM call goes through `AeroAI/Llm/AeroAiPhraseEngine.cs`; it logs system prompt, user prompt, and raw response to the debug output, and also to the file set in `AEROAI_LOG_FILE` (if the env var is present).
 - `AeroAI/Atc/AeroAiLlmSession.cs` routes readbacks after a clearance to the LLM (no longer returns null), so readback acknowledgments/corrections are spoken.
 - `prompts/aeroai_system_prompt.txt` now: uses `route_summary` when not “as filed” (e.g., “via BARPA then flight plan route” or “via flight plan route” if as filed; includes radar vectors when flagged); explicitly says do NOT ask for readback (host handles).
 - Ground frequency lookup: `Data/AirportFrequencies.cs` loads `Data/airport-frequencies.json` and `FlightContextToAtcContextMapper` injects `ground_frequency_mhz` when available; prompt allows adding a ground handoff on correct readback.
@@ -11,7 +11,7 @@
 - Voice/TTS: `Config/VoiceConfig` + `VoiceConfigLoader` (env-driven, TTS optional). `IAtcVoiceEngine` has an optional `VoiceProfile` parameter; `OpenAiAudioVoiceEngine` uses profile overrides (model/voice/speed) per call. Profiles load from `voices/*.json` via `VoiceProfileLoader`/`VoiceProfileManager`. Gibraltar override via `AEROAI_VOICE_GIBRALTAR` selects `gibraltar_english` or `gibraltar_spanish`; profiles use prefix `region_codes` (e.g., `LX`), `controller_types` to match CLEARANCE. Fallbacks: default profile then env config; logs warnings, never breaks text.
 
 ### Quick how-to
-1) Run the app and watch the console for `=== ATC DEBUG PROMPT/RESPONSE ===` blocks. Set `AEROAI_LOG_FILE=logs/atc.log` if you want file logging.
+1) Run the AeroAI UI and watch the debug output for `=== ATC DEBUG PROMPT/RESPONSE ===` blocks. Set `AEROAI_LOG_FILE=logs/atc.log` if you want file logging.
 2) First pilot call (no prior clearance): model issues clearance; `_state` moves to `ClearanceIssued`.
 3) Second call (readback-style): context has `ifr_clearance_issued=true`; prompt readback block should return "readback correct" or corrections; may optionally add "contact ground when ready for push and start."
 4) Push-to-talk: hold the mic button in the input bar, speak, release to auto-transcribe via local `whisper-cli.exe` (uses model under `./whisper/models/`, override via env if needed).
@@ -22,7 +22,7 @@
 - `AeroAI/Atc/AeroAiLlmSession.cs` - state machine; readbacks now sent to LLM in `ClearanceIssued`.
 - `AeroAI/Atc/FlightContext.cs` and `AeroAI/Atc/AeroAiLlmSession.cs` - reset methods for a fresh flight/session.
 - `AeroAI/Atc/FlightContextToAtcContextMapper.cs` - injects ground frequency when available.
-- `Data/AirportFrequencies.cs` - JSON-backed ground frequency lookup; `AtcNavDataDemo.csproj` copies the JSON to output. Use `Data/convert_frequencies_to_json.py` to convert CSV to JSON.
+- `Data/AirportFrequencies.cs` - JSON-backed ground frequency lookup; `AeroAI.UI/AeroAI.UI.csproj` copies the JSON to output. Use `Data/convert_frequencies_to_json.py` to convert CSV to JSON.
 - `voices/` - voice profiles (`default`, `gibraltar_english`, `gibraltar_spanish`) with `region_codes` prefixes and `controller_types`; `VoiceProfileLoader`/`VoiceProfileManager` select profiles; `OpenAiAudioVoiceEngine` uses them.
 - `AeroAI.UI/Services/WhisperSttService.cs` - push-to-talk mic capture + whisper-cli transcription (UI mic button in input bar, looks for whisper/whisper-cli.exe and whisper/models/ggml-medium.en-q5_0.bin).
 
