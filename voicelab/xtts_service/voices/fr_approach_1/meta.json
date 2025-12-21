@@ -1,0 +1,20 @@
+{
+  "id": "fr_approach_1",
+  "name": "France Approach 1",
+  "description": "XTTS placeholder voice. Drop reference.wav to enable cloning.",
+  "engine": "xtts",
+  "language": "en",
+  "roles": [
+    "approach"
+  ],
+  "region_codes": [
+    "LF"
+  ],
+  "tags": [
+    "french-accent",
+    "atc"
+  ],
+  "voice_id": "fr_approach_1",
+  "display_name": "France Approach 1 (XTTS)",
+  "notes": "Drop reference.wav here to enable voice cloning"
+}

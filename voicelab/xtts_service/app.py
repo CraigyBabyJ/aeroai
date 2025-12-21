@@ -32,6 +32,7 @@ UI_DIR = BASE_DIR / "ui"
 SETTINGS_PATH = BASE_DIR / "data" / "ui_settings.json"
 DEFAULT_SETTINGS = {"cache_enabled": True}
 PRONUNCIATION_PATH = BASE_DIR.parent / "pronunciation_map.json"
+MIN_REFERENCE_BYTES = 64 * 1024
 
 engine = TtsEngine(BASE_DIR)
 cache = TtsCache(base_dir=BASE_DIR, model_version="voicelab-multi")
@@ -127,15 +128,41 @@ def _voice_engine(voice: Dict) -> str:
     return str(voice.get("engine") or "xtts").lower()
 
 
+def _has_valid_reference(voice_id: str) -> bool:
+    if not voice_id:
+        return False
+    ref_path = voices.get_ref_wav_path(voice_id)
+    if not ref_path:
+        return False
+    if "placeholder" in ref_path.name.lower():
+        return False
+    try:
+        return ref_path.stat().st_size >= MIN_REFERENCE_BYTES
+    except OSError:
+        return False
+
+
+def _is_voice_eligible(voice: Dict) -> bool:
+    if _voice_engine(voice) == "coqui_vits":
+        return True
+    voice_id = voice.get("id") or ""
+    if not voice_id:
+        return False
+    return _has_valid_reference(voice_id)
+
+
 def _resolve_ref_wav(voice: Dict) -> Optional[Path]:
     if _voice_engine(voice) == "coqui_vits":
         return None
     voice_id = voice.get("id") or ""
     ref_wav = voices.get_ref_wav_path(voice_id)
-    if not ref_wav:
+    if not ref_wav or not _has_valid_reference(voice_id):
         raise HTTPException(
             status_code=400,
-            detail=f"Voice '{voice_id}' is missing ref.wav. Add xtts_service/voices/{voice_id}/ref.wav.",
+            detail=(
+                f"Voice '{voice_id}' is missing reference audio. "
+                f"Add xtts_service/voices/{voice_id}/reference.wav (or ref.wav)."
+            ),
         )
     return ref_wav
 
@@ -218,7 +245,7 @@ def _stable_pick(voices_list: List[Dict], seed: str) -> Dict:
 
 
 def _resolve_voice_auto(body: TtsRequest) -> Dict:
-    all_voices = voices.list_voices()
+    all_voices = [voice for voice in voices.list_voices() if _is_voice_eligible(voice)]
     if not all_voices:
         raise HTTPException(status_code=404, detail="No voices available.")
 

@@ -39,7 +39,7 @@ voicelab/
 │   ├── voices/                  # Voice profiles directory
 │   │   └── <voice_id>/
 │   │       ├── meta.json        # Voice metadata
-│   │       └── ref.wav          # Reference audio (6-12s, mono, 16-22kHz)
+│   │       └── reference.wav    # Reference audio (6-12s, mono, 16-22kHz)
 │   ├── ui/                      # Web UI (static files)
 │   │   ├── index.html
 │   │   ├── app.js
@@ -450,7 +450,7 @@ Each voice is stored in `xtts_service/voices/<voice_id>/`:
 voices/
 └── <voice_id>/
     ├── meta.json    # Voice metadata (required)
-    └── ref.wav      # Reference audio (required)
+    └── reference.wav # Reference audio (required, ref.wav also supported)
 ```
 
 ### Voice Metadata (`meta.json`)
@@ -476,7 +476,7 @@ voices/
 - `roles`: Array of ATC roles this voice supports
 - `tags`: Array of descriptive tags
 
-**Note:** Accent comes from the reference audio (`ref.wav`). Keep text inputs in English.
+**Note:** Accent comes from the reference audio (`reference.wav` or `ref.wav`). Keep text inputs in English.
 
 ### Voice Selection Contract
 
@@ -495,8 +495,25 @@ voices/
 
 1. Create directory: `xtts_service/voices/<voice_id>/`
 2. Add `meta.json` with voice metadata
-3. Add `ref.wav` with reference audio
+3. Add `reference.wav` (or `ref.wav`) with reference audio
 4. Restart the service (or voices are auto-discovered on startup)
+
+### XTTS Placeholder Drop-In Workflow
+
+1. Record or obtain a clean `reference.wav` sample.
+2. Drop it into the existing placeholder folder (for example, `xtts_service/voices/fr_tower_1/reference.wav`).
+3. Restart VoiceLab to pick it up.
+
+No AeroAI changes or config edits are required.
+
+### Region + Role Matching (Auto Selection)
+
+- Auto-selection uses `voice_id="auto"` plus `role` and `facility_icao` from AeroAI.
+- VoiceLab derives a region prefix from the ICAO (e.g., `K`, `LF`) and matches on
+  `region_codes` + `roles` in `meta.json`.
+- Placeholder XTTS profiles are inactive until a `reference.wav` (or `ref.wav`)
+  exists in the voice folder and is a real sample (not a tiny placeholder).
+- Keep `language: "en"` in meta; the accent comes from the reference audio.
 
 ---
 
@@ -658,7 +675,7 @@ To add a new engine:
 
 **Voice not found:**
 - Verify `xtts_service/voices/<voice_id>/meta.json` exists
-- Verify `xtts_service/voices/<voice_id>/ref.wav` exists
+- Verify `xtts_service/voices/<voice_id>/reference.wav` (or `ref.wav`) exists
 - Check voice ID matches directory name
 
 **Audio quality issues:**

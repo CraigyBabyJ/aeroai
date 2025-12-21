@@ -44,7 +44,11 @@ class VoiceStore:
 
     def get_ref_wav_path(self, voice_id: str) -> Optional[Path]:
         """Return the reference wav path if present."""
-        ref_path = self.voices_dir / voice_id / "ref.wav"
+        voice_dir = self.voices_dir / voice_id
+        reference_path = voice_dir / "reference.wav"
+        if reference_path.exists():
+            return reference_path
+        ref_path = voice_dir / "ref.wav"
         if ref_path.exists():
             return ref_path
         return None

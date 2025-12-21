@@ -1,0 +1,20 @@
+{
+  "id": "us_tower_1",
+  "name": "US Tower 1",
+  "description": "XTTS placeholder voice. Drop reference.wav to enable cloning.",
+  "engine": "xtts",
+  "language": "en",
+  "roles": [
+    "tower"
+  ],
+  "region_codes": [
+    "K"
+  ],
+  "tags": [
+    "american",
+    "atc"
+  ],
+  "voice_id": "us_tower_1",
+  "display_name": "US Tower 1 (XTTS)",
+  "notes": "Drop reference.wav here to enable voice cloning"
+}

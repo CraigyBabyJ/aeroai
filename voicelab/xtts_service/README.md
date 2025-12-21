@@ -4,7 +4,7 @@
 VoiceLab serves XTTS and Coqui VITS (VCTK) voices from a single FastAPI backend. Engine selection is driven by `voices/*/meta.json` and is transparent to API clients.
 
 ## Engines and voices
-- XTTS voices: use `engine: "xtts"` (or omit `engine` for backward compatibility) and require `voices/<id>/ref.wav`.
+- XTTS voices: use `engine: "xtts"` (or omit `engine` for backward compatibility) and require `voices/<id>/reference.wav` (or `ref.wav`).
 - Coqui VITS voices: use `engine: "coqui_vits"`, `model: "tts_models/en/vctk/vits"`, and `speaker_id: "p###"`. No `ref.wav` is required.
 - Starter pack: Coqui VCTK voice metas are preloaded as `voices/coqui_p225`, `coqui_p226`, …, `coqui_p243`.
 

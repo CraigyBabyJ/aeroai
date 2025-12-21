@@ -1,0 +1,20 @@
+{
+  "id": "fr_delivery_1",
+  "name": "France Delivery 1",
+  "description": "XTTS placeholder voice. Drop reference.wav to enable cloning.",
+  "engine": "xtts",
+  "language": "en",
+  "roles": [
+    "delivery"
+  ],
+  "region_codes": [
+    "LF"
+  ],
+  "tags": [
+    "french-accent",
+    "atc"
+  ],
+  "voice_id": "fr_delivery_1",
+  "display_name": "France Delivery 1 (XTTS)",
+  "notes": "Drop reference.wav here to enable voice cloning"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "us_ground_1",
+  "name": "US Ground 1",
+  "description": "XTTS placeholder voice. Drop reference.wav to enable cloning.",
+  "engine": "xtts",
+  "language": "en",
+  "roles": [
+    "ground"
+  ],
+  "region_codes": [
+    "K"
+  ],
+  "tags": [
+    "american",
+    "atc"
+  ],
+  "voice_id": "us_ground_1",
+  "display_name": "US Ground 1 (XTTS)",
+  "notes": "Drop reference.wav here to enable voice cloning"
+}
