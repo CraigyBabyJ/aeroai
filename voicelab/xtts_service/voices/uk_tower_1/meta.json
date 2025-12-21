@@ -1,0 +1,23 @@
+{
+  "id": "uk_tower_1",
+  "name": "UK Tower 1",
+  "description": "UK ATC voice (Coqui VITS p227).",
+  "engine": "coqui_vits",
+  "model": "tts_models/en/vctk/vits",
+  "speaker_id": "p227",
+  "language": "en-GB",
+  "roles": [
+    "tower"
+  ],
+  "region_codes": [
+    "EG",
+    "UK"
+  ],
+  "tags": [
+    "uk",
+    "british",
+    "atc",
+    "coqui",
+    "vctk"
+  ]
+}

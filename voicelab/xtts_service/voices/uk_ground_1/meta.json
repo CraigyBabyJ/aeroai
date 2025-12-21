@@ -1,0 +1,23 @@
+{
+  "id": "uk_ground_1",
+  "name": "UK Ground 1",
+  "description": "UK ATC voice (Coqui VITS p226).",
+  "engine": "coqui_vits",
+  "model": "tts_models/en/vctk/vits",
+  "speaker_id": "p226",
+  "language": "en-GB",
+  "roles": [
+    "ground"
+  ],
+  "region_codes": [
+    "EG",
+    "UK"
+  ],
+  "tags": [
+    "uk",
+    "british",
+    "atc",
+    "coqui",
+    "vctk"
+  ]
+}

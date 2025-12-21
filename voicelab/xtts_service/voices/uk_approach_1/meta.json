@@ -1,0 +1,23 @@
+{
+  "id": "uk_approach_1",
+  "name": "UK Approach 1",
+  "description": "UK ATC voice (Coqui VITS p228).",
+  "engine": "coqui_vits",
+  "model": "tts_models/en/vctk/vits",
+  "speaker_id": "p228",
+  "language": "en-GB",
+  "roles": [
+    "approach"
+  ],
+  "region_codes": [
+    "EG",
+    "UK"
+  ],
+  "tags": [
+    "uk",
+    "british",
+    "atc",
+    "coqui",
+    "vctk"
+  ]
+}
