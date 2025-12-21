@@ -1,6 +1,6 @@
 # OpenAI Integration Setup
 
-AeroAI ships with an OpenAI client and phrase engine; `.env` is loaded via `EnvironmentConfig.Load()` at startup.
+AeroAI ships with an OpenAI ATC response generator; `.env` is loaded via `EnvironmentConfig.Load()` at startup.
 
 ## Quick start
 1) Copy `.env.example` to `.env`.
@@ -9,11 +9,15 @@ AeroAI ships with an OpenAI client and phrase engine; `.env` is loaded via `Envi
    ```csharp
    EnvironmentConfig.Load();
    ```
-4) Use the client/phrase engine:
+4) Use the ATC response generator:
    ```csharp
    EnvironmentConfig.Load();
-   using var llm = new OpenAiLlmClient(EnvironmentConfig.GetOpenAiApiKey(), EnvironmentConfig.GetOpenAiModel());
-   var session = new AeroAiLlmSession(llm, flightContext);
+   var generator = new OpenAiAtcResponseGenerator(
+       EnvironmentConfig.GetOpenAiApiKey(),
+       EnvironmentConfig.GetOpenAiModel(),
+       EnvironmentConfig.GetOpenAiBaseUrl(),
+       EnvironmentConfig.GetSystemPromptPath());
+   var session = new AeroAiLlmSession(generator, flightContext);
    var reply = await session.HandlePilotTransmissionAsync("Requesting IFR clearance to Innsbruck.");
    ```
    or
@@ -29,18 +33,18 @@ AeroAI ships with an OpenAI client and phrase engine; `.env` is loaded via `Envi
 ## Files that matter
 - `.env` – holds `OPENAI_API_KEY`, `OPENAI_MODEL`, and optional `AEROAI_SYSTEM_PROMPT_PATH` (defaults to `prompts/aeroai_finetuned_prompt.txt`).
 - `AeroAI/Llm/OpenAiLlmClient.cs` – chat/completions client; base URL is hardcoded to prevent double `/v1` errors.
-- `AeroAI/Llm/AeroAiPhraseEngine.cs` – builds prompts, logs debug blocks, and runs `AtcResponseValidator` against replies.
+- `AeroAI/Atc/OpenAiAtcResponseGenerator.cs` – OpenAI-backed ATC response generator (prompt build + validation + logging).
+- `AeroAI/Llm/AeroAiPhraseEngine.cs` – legacy wrapper around the OpenAI generator for direct prompt usage.
 - `prompts/aeroai_system_prompt.txt` and `prompts/aeroai_finetuned_prompt.txt` – system prompts (fine-tuned prompt is the default path).
 
-## Switching models
-Swap between OpenAI and Ollama via the `ILlmClient` interface:
+## Switching providers
+Swap between OpenAI and a stub generator via `IAtcResponseGenerator`:
 ```csharp
-ILlmClient llm = new OpenAiLlmClient(apiKey, "gpt-4o-mini");
-llm = new OllamaLlmClient("http://localhost:11434", "aeroai");
+IAtcResponseGenerator generator = new OpenAiAtcResponseGenerator(apiKey, "gpt-4o-mini");
+generator = new TemplateAtcResponseGenerator();
 ```
-`AeroAiLlmSession` or `AeroAiPhraseEngine` work with either client.
+Select in the desktop UI via `userconfig.json` (`AtcTextProvider`: `openai` or `template`).
 
 ## Troubleshooting
 - 404s: base URL is hardcoded to `https://api.openai.com/v1/`; 404s typically indicate proxy/VPN issues (see `TROUBLESHOOTING_404.md`).
 - Key format: must start with `sk-` or `sk-proj-` (enforced by `EnvironmentConfig.GetOpenAiApiKey()`).
-

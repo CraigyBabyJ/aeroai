@@ -9,7 +9,7 @@ The `AeroAiLlmSession` was using the old `PromptTemplate` which builds a differe
 ## Fix Applied
 
 1. **Created `FlightContextToAtcContextMapper`** - Properly maps `FlightContext` → `AtcContext` with correct structure
-2. **Updated `AeroAiLlmSession`** - Now uses `AeroAiPhraseEngine` which:
+2. **Updated `AeroAiLlmSession`** - Now uses `IAtcResponseGenerator` (OpenAI provider by default) which:
    - Loads the system prompt from file
    - Builds the correct JSON context structure
    - Tracks state flags (ifr_clearance_issued, etc.)

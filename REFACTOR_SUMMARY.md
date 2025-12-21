@@ -1,5 +1,7 @@
 # AeroAI OpenAI Refactor Summary
 
+Update: ATC text generation now routes through `IAtcResponseGenerator`. The OpenAI-backed implementation is `OpenAiAtcResponseGenerator`, and `AeroAiPhraseEngine` remains as a wrapper for direct prompt usage.
+
 ## ✅ Completed
 
 ### 1. Environment Configuration (`.env` file)
@@ -12,7 +14,7 @@
 ### 2. System Prompt
 - **File**: `prompts/aeroai_system_prompt.txt`
 - **Content**: Exact system prompt as specified
-- **Loaded**: Automatically by `AeroAiPhraseEngine` at startup
+- **Loaded**: Automatically by `OpenAiAtcResponseGenerator` at startup (and by the `AeroAiPhraseEngine` wrapper)
 
 ### 3. Structured ATC Context Model
 - **File**: `AeroAI/Atc/AtcContext.cs`
@@ -36,19 +38,22 @@
   - Backward compatible with existing `GenerateAsync()` method
   - Proper error handling and timeouts
 
-### 5. ATC Phrase Engine
-- **File**: `AeroAI/Llm/AeroAiPhraseEngine.cs`
-- **Purpose**: Main entry point for generating ATC transmissions
+### 5. ATC Response Generator
+- **File**: `AeroAI/Atc/OpenAiAtcResponseGenerator.cs`
+- **Purpose**: OpenAI-backed implementation of `IAtcResponseGenerator` used by `AeroAiLlmSession` and the UI.
 - **API**:
   ```csharp
-  var engine = new AeroAiPhraseEngine(apiKey, model, baseUrl, systemPromptPath);
-  var atcResponse = await engine.GenerateAtcTransmissionAsync(context, pilotTransmission);
+  var generator = new OpenAiAtcResponseGenerator(apiKey, model, baseUrl, systemPromptPath);
+  var atcResponse = await generator.GenerateAsync(new AtcRequest
+  {
+      TranscriptText = pilotTransmission,
+      ControllerRole = context.ControllerRole,
+      FlightContext = flightContext,
+      AtcContext = context
+  });
   ```
-- **Features**:
-  - Loads system prompt from file
-  - Builds user prompt with JSON context
-  - Calls OpenAI Chat Completions API
-  - Returns plain text ATC transmission
+- **Notes**:
+  - `AeroAiPhraseEngine` is a wrapper around the OpenAI generator for direct prompt use.
 
 ### 6. Demo Function
 - **File**: `AeroAI/Examples/DemoClearance.cs`
@@ -64,7 +69,7 @@
 ```csharp
 using AeroAI.Atc;
 using AeroAI.Config;
-using AeroAI.Llm;
+using AeroAI.Atc;
 using AeroAI.Examples;
 
 // Load .env file
@@ -80,8 +85,8 @@ Or integrate into your existing code:
 // 1. Load config
 EnvironmentConfig.Load();
 
-// 2. Create phrase engine
-using var engine = new AeroAiPhraseEngine(
+// 2. Create ATC response generator
+var generator = new OpenAiAtcResponseGenerator(
     apiKey: EnvironmentConfig.GetOpenAiApiKey(),
     model: EnvironmentConfig.GetOpenAiModel(),
     systemPromptPath: EnvironmentConfig.GetSystemPromptPath()
@@ -116,10 +121,13 @@ var context = new AtcContext
 };
 
 // 4. Generate ATC response
-var atcResponse = await engine.GenerateAtcTransmissionAsync(
-    context: context,
-    pilotTransmission: "Good evening Clearance, this is CJ requesting IFR clearance to Casablanca as filed"
-);
+var atcResponse = await generator.GenerateAsync(new AtcRequest
+{
+    TranscriptText = "Good evening Clearance, this is CJ requesting IFR clearance to Casablanca as filed",
+    ControllerRole = context.ControllerRole,
+    FlightContext = null,
+    AtcContext = context
+});
 ```
 
 ## Architecture
@@ -141,10 +149,10 @@ var atcResponse = await engine.GenerateAtcTransmissionAsync(
                │
                ▼
 ┌─────────────────────────────────────────┐
-│      AeroAiPhraseEngine                 │
-│  - Loads system prompt                  │
-│  - Builds user prompt (JSON + pilot)   │
-│  - Calls OpenAI Chat Completions       │
+│   OpenAiAtcResponseGenerator            │
+│  - Implements IAtcResponseGenerator     │
+│  - Builds user prompt (JSON + pilot)    │
+│  - Calls OpenAI Chat Completions        │
 └──────────────┬──────────────────────────┘
                │
                ▼
@@ -171,8 +179,8 @@ var atcResponse = await engine.GenerateAtcTransmissionAsync(
    - Populate from SimBrief, nav data, weather, sim state
 
 2. **Wire into existing Program.cs**
-   - Replace regex-based `AeroAiSession` with `AeroAiPhraseEngine`
-   - Or use both: decision logic → phrase engine
+   - Replace regex-based `AeroAiSession` with `IAtcResponseGenerator`
+   - Or use both: decision logic → generator
 
 3. **Add real data sources**
    - SimBrief: `FlightInfo` (dep/arr, cruise level)
@@ -184,7 +192,9 @@ var atcResponse = await engine.GenerateAtcTransmissionAsync(
 
 ### New Files
 - `AeroAI/Atc/AtcContext.cs` - Structured context model
-- `AeroAI/Llm/AeroAiPhraseEngine.cs` - Main phrase engine
+- `AeroAI/Atc/IAtcResponseGenerator.cs` - ATC response generator interface
+- `AeroAI/Atc/OpenAiAtcResponseGenerator.cs` - OpenAI-backed generator
+- `AeroAI/Llm/AeroAiPhraseEngine.cs` - Wrapper around the OpenAI generator
 - `AeroAI/Config/EnvironmentConfig.cs` - .env loader
 - `AeroAI/Examples/DemoClearance.cs` - Demo function
 - `README_ATC_PHRASE_ENGINE.md` - Documentation

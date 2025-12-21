@@ -4,6 +4,8 @@
 
 The system prompt is embedded in the `AeroAI.Modelfile`. It defines AeroAI as a professional ICAO-standard ATC controller with strict operational rules.
 
+Note: `AeroAiLlmSession` now depends on `IAtcResponseGenerator`. To use Ollama, wrap the client in your own generator implementation that returns `AtcResponse`.
+
 ## Creating the Custom Ollama Model
 
 1. **Save the Modelfile:**
@@ -68,8 +70,9 @@ var context = new FlightContext
     SquawkCode = "4672"
 };
 
-// Create ATC session
-var session = new AeroAiLlmSession(llm, context);
+// Create ATC session (wrap Ollama client in your own generator)
+IAtcResponseGenerator generator = new MyOllamaAtcResponseGenerator(llm);
+var session = new AeroAiLlmSession(generator, context);
 
 // Handle pilot transmission
 string atcResponse = await session.HandlePilotTransmissionAsync(

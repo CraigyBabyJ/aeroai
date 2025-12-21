@@ -1,6 +1,6 @@
 # AeroAI ATC Phrase Engine
 
-Console-based ATC phrase generator using OpenAI. Text output remains primary; optional TTS can be enabled and customized via voice profiles.
+ATC phrase generator used by AeroAI.UI. Text output remains primary; optional TTS can be enabled and customized via voice profiles. The UI now routes ATC text through `IAtcResponseGenerator` (OpenAI provider by default) and you can switch providers via `userconfig.json` (`AtcTextProvider`).
 
 ## Environment
 ```
@@ -22,7 +22,8 @@ AEROAI_VOICE_GIBRALTAR=english|spanish (defaults to english)
 
 ## Prompt + validation
 - Default system prompt path is `prompts/aeroai_finetuned_prompt.txt` (override with `AEROAI_SYSTEM_PROMPT_PATH` if you want `aeroai_system_prompt.txt` instead).
-- Pass a `FlightContext` into `AeroAiPhraseEngine.GenerateAtcTransmissionAsync` to enable `AtcResponseValidator`; if the LLM invents a runway/squawk/altitude/frequency/SID not in context, the engine logs the rejection and emits a deterministic fallback clearance.
+- `OpenAiAtcResponseGenerator` enforces `AtcResponseValidator` when `FlightContext` is provided in the `AtcRequest`. Invalid replies fall back to a deterministic clearance.
+- `AeroAiPhraseEngine` is a legacy wrapper around the OpenAI generator and still honors the same validation and logging behavior.
 - Readback flow uses `ReadbackValidator`/`ReadbackNormalizer` plus `SpokenNumberNormalizer` and `CallsignValidator` to keep transcripts consistent before hitting the LLM.
 - Debug logging: `AEROAI_LOG_FILE` appends prompt/response blocks; `AEROAI_LOG_API` re-enables the verbose API request/response dump.
 
@@ -34,7 +35,7 @@ AEROAI_VOICE_GIBRALTAR=english|spanish (defaults to english)
 - Early step toward region-based voices; extend by adding more JSON files in `voices/`.
 
 ## Usage
-Run the console app, type pilot transmissions; ATC responds with text. If TTS is enabled, audio is synthesized using the selected voice profile; failures log warnings and never block text output.
+Run the AeroAI desktop UI and interact via the mic or text input. The phrase engine generates ATC responses; if TTS is enabled, audio is synthesized using the selected voice profile while failures log warnings and never block text output.
 
 ## Host-side radio effect example
 If you want a subtle radio effect and squelch tail for ATC audio (only ATC, not pilot), an external host can do:
