@@ -56,8 +56,10 @@ whisper/
 
 # whisper-fast service code can be committed, but never commit its venv/caches
 whisper-fast/venv/
+whisper-fast/venv311/
 whisper-fast/__pycache__/
 whisper-fast/*.pyc
+whisper-fast/*.dll
 
 # Local config / secrets (keep local, do not commit)
 checkwx.json
