@@ -58,6 +58,7 @@ Fields:
 Common slots used by templates:
 - `next_role`, `next_freq`: pending handoff target used in handoff instructions.
 - `facility`, `role`: used in check-in acknowledgments.
+- `facility`, `role`: used in check-in acknowledgments.
 
 ## How to edit
 1. Update intent keywords/rules in `intents.json`.

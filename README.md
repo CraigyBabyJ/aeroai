@@ -6,6 +6,7 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 - WPF desktop client with push-to-talk mic capture (whisper-cli by default, optional whisper-fast HTTP service), typed input, and per-device audio controls.
 - SimBrief import plus navdata-aware runway/SID selection, live METAR/ATIS letter caching via CheckWX, and airport/airline name resolution.
 - ATC response generator with guard rails (ReadbackValidator, AtcResponseValidator, spoken-number/callsign/aircraft normalizers) to stop hallucinated runways, squawks, or frequencies.
+- Deterministic ATC session flow driven by JSON packs (intents/flows/templates), including two-step handoffs that only complete on pilot check-in.
 - Generator provider selection via `userconfig.json` (`AtcTextProvider`: `openai` or `template`).
 - VoiceLab TTS (FastAPI) is the default local TTS backend when enabled; voice selection lives in VoiceLab `meta.json` profiles, and the base URL is stored in `userconfig.json`.
 - Deterministic STT correction layer driven by `Config/stt_corrections.json` (hot-reloads when the file changes).

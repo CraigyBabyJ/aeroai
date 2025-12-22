@@ -23,6 +23,7 @@ AEROAI_SYSTEM_PROMPT_PATH=prompts/aeroai_system_prompt.txt
   - `Data/atc/intents.json` for intent keywords/examples
   - `Data/atc/flows.json` for state transitions and handoffs
   - `Data/atc/templates.json` for deterministic response templates
+- `flows.json` defines `role_phase_map` plus `requires_pending_handoff` so handoffs only commit on pilot check-in.
 - OpenAI is only used as a phrasing helper when no template matches; state transitions remain deterministic from JSON.
 
 ## VoiceLab profiles (regional voices)
