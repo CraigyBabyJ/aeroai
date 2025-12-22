@@ -1,0 +1,177 @@
+{
+  "role_phase_map": {
+    "delivery": "clearance",
+    "ground": "ground",
+    "tower": "tower",
+    "departure": "departure",
+    "center": "center",
+    "approach": "approach"
+  },
+  "phases": [
+    {
+      "id": "clearance",
+      "allowed_intents": [
+        "REQUEST_IFR_CLEARANCE",
+        "READBACK_CLEARANCE",
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "delivery",
+      "expected_next_intents": [
+        "READBACK_CLEARANCE",
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "REQUEST_IFR_CLEARANCE",
+          "atc_action": "ISSUE_CLEARANCE",
+          "next_state": "clearance"
+        },
+        {
+          "intent": "READBACK_CLEARANCE",
+          "atc_action": "READBACK_CORRECT",
+          "next_state": "clearance",
+          "set_pending_handoff": true,
+          "handoff": {
+            "role": "ground"
+          }
+        },
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "commit_pending_handoff": true,
+          "requires_pending_handoff": true
+        }
+      ]
+    },
+    {
+      "id": "ground",
+      "allowed_intents": [
+        "REQUEST_TAXI",
+        "READY_FOR_DEPARTURE",
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "ground",
+      "expected_next_intents": [
+        "READY_FOR_DEPARTURE",
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "REQUEST_TAXI",
+          "atc_action": "ISSUE_TAXI",
+          "next_state": "ground"
+        },
+        {
+          "intent": "READY_FOR_DEPARTURE",
+          "atc_action": "ISSUE_HANDOFF",
+          "next_state": "ground",
+          "set_pending_handoff": true,
+          "handoff": {
+            "role": "tower"
+          }
+        },
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "commit_pending_handoff": true,
+          "requires_pending_handoff": true
+        }
+      ]
+    },
+    {
+      "id": "tower",
+      "allowed_intents": [
+        "READY_FOR_DEPARTURE",
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "tower",
+      "expected_next_intents": [
+        "READY_FOR_DEPARTURE",
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "READY_FOR_DEPARTURE",
+          "atc_action": "TAKEOFF_CLEARANCE",
+          "next_state": "tower",
+          "set_pending_handoff": true,
+          "handoff": {
+            "role": "departure"
+          }
+        },
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "commit_pending_handoff": true,
+          "requires_pending_handoff": true
+        }
+      ]
+    },
+    {
+      "id": "departure",
+      "allowed_intents": [
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "departure",
+      "expected_next_intents": [
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "next_state": "departure",
+          "requires_pending_handoff": true
+        }
+      ]
+    },
+    {
+      "id": "approach",
+      "allowed_intents": [
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "approach",
+      "expected_next_intents": [
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "next_state": "approach",
+          "requires_pending_handoff": true
+        }
+      ]
+    },
+    {
+      "id": "center",
+      "allowed_intents": [
+        "HANDOFF_CHECKIN",
+        "SAY_AGAIN"
+      ],
+      "default_controller_role": "center",
+      "expected_next_intents": [
+        "HANDOFF_CHECKIN"
+      ],
+      "fallback_template": "say_again",
+      "transitions": [
+        {
+          "intent": "HANDOFF_CHECKIN",
+          "atc_action": "ACK_HANDOFF",
+          "next_state": "center",
+          "requires_pending_handoff": true
+        }
+      ]
+    }
+  ]
+}

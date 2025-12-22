@@ -1,0 +1,112 @@
+{
+  "templates": [
+    {
+      "id": "say_again",
+      "text": "{callsign}, say again."
+    },
+    {
+      "id": "handoff_instruction",
+      "text": "{callsign}, contact {next_role} on {next_freq}."
+    },
+    {
+      "id": "handoff_checkin_ack",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_reissue",
+      "text": "{callsign}, contact {next_role} on {next_freq}."
+    },
+    {
+      "id": "clearance_issue",
+      "phase": "clearance",
+      "intent": "REQUEST_IFR_CLEARANCE",
+      "atc_action": "ISSUE_CLEARANCE",
+      "text": "{callsign}, cleared to {destination_name} via {sid} departure, then as filed. Departure runway {runway}, initial climb {initial_climb}, squawk {squawk}, expect {cruise_level} ten minutes after departure.",
+      "requires_readback": true,
+      "readback_items": [
+        "route",
+        "runway",
+        "squawk"
+      ]
+    },
+    {
+      "id": "readback_correct",
+      "phase": "clearance",
+      "intent": "READBACK_CLEARANCE",
+      "atc_action": "READBACK_CORRECT",
+      "text": "{callsign}, readback correct. Contact {next_role} on {next_freq}."
+    },
+    {
+      "id": "taxi_instructions",
+      "phase": "ground",
+      "intent": "REQUEST_TAXI",
+      "atc_action": "ISSUE_TAXI",
+      "text": "{callsign}, taxi to holding point runway {runway} via {taxi_route}, hold short runway {runway}.",
+      "requires_readback": true,
+      "readback_items": [
+        "runway",
+        "taxi_route"
+      ]
+    },
+    {
+      "id": "handoff_tower",
+      "phase": "ground",
+      "intent": "READY_FOR_DEPARTURE",
+      "atc_action": "ISSUE_HANDOFF",
+      "text": "{callsign}, contact {next_role} on {next_freq}."
+    },
+    {
+      "id": "takeoff_clearance",
+      "phase": "tower",
+      "intent": "READY_FOR_DEPARTURE",
+      "atc_action": "TAKEOFF_CLEARANCE",
+      "text": "{callsign}, runway {runway}, cleared for takeoff.",
+      "requires_readback": true,
+      "readback_items": [
+        "runway"
+      ]
+    },
+    {
+      "id": "handoff_checkin",
+      "phase": "clearance",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_checkin_ground",
+      "phase": "ground",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_checkin_tower",
+      "phase": "tower",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_checkin_departure",
+      "phase": "departure",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_checkin_approach",
+      "phase": "approach",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    },
+    {
+      "id": "handoff_checkin_center",
+      "phase": "center",
+      "intent": "HANDOFF_CHECKIN",
+      "atc_action": "ACK_HANDOFF",
+      "text": "{callsign}, {facility} {role}, roger."
+    }
+  ]
+}

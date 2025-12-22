@@ -1,0 +1,140 @@
+{
+  "default_threshold": 0.6,
+  "intents": [
+    {
+      "id": "REQUEST_IFR_CLEARANCE",
+      "required_slots": [
+        "runway"
+      ],
+      "allowed_phases": [
+        "clearance"
+      ],
+      "score_rules": [
+        {
+          "id": "clearance_keywords",
+          "keywords": [
+            "request clearance",
+            "ifr clearance",
+            "clearance request"
+          ],
+          "boost": 0.7,
+          "expected_next_boost": 0.2
+        },
+        {
+          "id": "ready_copy",
+          "keywords": [
+            "ready to copy clearance"
+          ],
+          "boost": 0.4
+        }
+      ]
+    },
+    {
+      "id": "READBACK_CLEARANCE",
+      "required_slots": [],
+      "allowed_phases": [
+        "clearance"
+      ],
+      "score_rules": [
+        {
+          "id": "readback_keywords",
+          "keywords": [
+            "cleared to",
+            "as filed",
+            "readback"
+          ],
+          "boost": 0.6,
+          "expected_next_boost": 0.2
+        }
+      ]
+    },
+    {
+      "id": "REQUEST_TAXI",
+      "required_slots": [
+        "runway"
+      ],
+      "allowed_phases": [
+        "ground"
+      ],
+      "score_rules": [
+        {
+          "id": "taxi_keywords",
+          "keywords": [
+            "ready to taxi",
+            "request taxi"
+          ],
+          "boost": 0.7,
+          "expected_next_boost": 0.2
+        }
+      ]
+    },
+    {
+      "id": "READY_FOR_DEPARTURE",
+      "required_slots": [
+        "runway"
+      ],
+      "allowed_phases": [
+        "ground",
+        "tower"
+      ],
+      "score_rules": [
+        {
+          "id": "departure_keywords",
+          "keywords": [
+            "ready for departure",
+            "ready for takeoff",
+            "holding short"
+          ],
+          "boost": 0.6,
+          "expected_next_boost": 0.2
+        }
+      ]
+    },
+    {
+      "id": "HANDOFF_CHECKIN",
+      "required_slots": [],
+      "allowed_phases": [
+        "clearance",
+        "ground",
+        "tower",
+        "departure",
+        "approach",
+        "center"
+      ],
+      "score_rules": [
+        {
+          "id": "with_you",
+          "keywords": [
+            "with you",
+            "checking in"
+          ],
+          "boost": 0.6,
+          "expected_next_boost": 0.2
+        }
+      ]
+    },
+    {
+      "id": "SAY_AGAIN",
+      "required_slots": [],
+      "allowed_phases": [
+        "clearance",
+        "ground",
+        "tower",
+        "departure",
+        "approach",
+        "center"
+      ],
+      "score_rules": [
+        {
+          "id": "say_again_keywords",
+          "keywords": [
+            "say again",
+            "repeat",
+            "unable"
+          ],
+          "boost": 0.4
+        }
+      ]
+    }
+  ]
+}
