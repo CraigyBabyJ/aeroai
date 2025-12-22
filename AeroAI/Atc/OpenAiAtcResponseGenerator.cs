@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using AeroAI.Config;
 using AeroAI.Data;
 using AeroAI.Llm;
+using AeroAI.AtcSession;
 
 namespace AeroAI.Atc;
 
@@ -44,7 +45,7 @@ public sealed class OpenAiAtcResponseGenerator : IAtcResponseGenerator, IDisposa
                 return new AtcResponse { SpokenText = "Say again?" };
             }
 
-            string userPrompt = BuildUserPrompt(atcContext, pilotTransmission);
+            string userPrompt = BuildUserPrompt(atcContext, pilotTransmission, request.SessionState);
             LogDebugPrompt(_systemPrompt, userPrompt);
             if (ShouldLogApiRequests())
             {
@@ -159,8 +160,14 @@ public sealed class OpenAiAtcResponseGenerator : IAtcResponseGenerator, IDisposa
         }
     }
 
-    private static string BuildUserPrompt(AtcContext context, string pilotTransmission)
+    private static string BuildUserPrompt(AtcContext context, string pilotTransmission, object? sessionState)
     {
+        if (sessionState is AtcPromptData promptData)
+        {
+            var builder = new AtcPromptBuilder();
+            return builder.BuildUserPrompt(context, promptData, pilotTransmission);
+        }
+
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.AppendLine("CONTEXT_JSON:");
         stringBuilder.AppendLine("```json");

@@ -95,12 +95,29 @@ public static class AircraftTypeResolver
 
 		var normalized = NormalizeInput(input);
 
-		// 1. Direct ICAO code match (A320, B738, etc.)
-		var icaoMatch = Regex.Match(normalized, @"\b([AB]\d{3}[A-Z]?|[AB]\d{2}[A-Z])\b", RegexOptions.IgnoreCase);
-		if (icaoMatch.Success)
-		{
-			return (true, icaoMatch.Value.ToUpperInvariant(), false);
-		}
+        // 1. Direct ICAO code match (A320, B738, etc.)
+        var icaoMatch = Regex.Match(normalized, @"\b([AB]\d{3}[A-Z]?|[AB]\d{2}[A-Z])\b", RegexOptions.IgnoreCase);
+        if (icaoMatch.Success)
+        {
+                var icaoValue = icaoMatch.Value.ToUpperInvariant();
+                var familyMatchFromIcao = Regex.Match(icaoValue, @"^[AB](\d{3})$");
+                if (familyMatchFromIcao.Success)
+                {
+                        var familyFromIcao = familyMatchFromIcao.Groups[1].Value;
+                        if (VariantMappings.TryGetValue(familyFromIcao, out var variants))
+                        {
+                                foreach (var (variantKey, icaoCode) in variants)
+                                {
+                                        if (normalized.Contains(variantKey, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                                return (true, icaoCode, false);
+                                        }
+                                }
+                        }
+                }
+
+                return (true, icaoValue, false);
+        }
 
 		// 2. Extract numeric family (737, 320, etc.)
 		var familyMatch = Regex.Match(normalized, @"\b(7[0-9]{2}|3[0-9]{2})\b");

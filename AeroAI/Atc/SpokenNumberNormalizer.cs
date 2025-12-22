@@ -189,11 +189,12 @@ public static class SpokenNumberNormalizer
 	/// <summary>
 	/// Build regex pattern matching any spoken number word.
 	/// </summary>
-	private static string GetSpokenNumberPattern()
-	{
-		var words = new List<string>(SpokenDigits.Keys);
-		return string.Join("|", words.ConvertAll(w => Regex.Escape(w)));
-	}
+        private static string GetSpokenNumberPattern()
+        {
+                var words = new List<string>(SpokenDigits.Keys);
+                words.Sort((a, b) => b.Length.CompareTo(a.Length));
+                return string.Join("|", words.ConvertAll(w => $@"\b{Regex.Escape(w)}\b"));
+        }
 
 	/// <summary>
 	/// Convert a sequence of spoken number words to digit string.

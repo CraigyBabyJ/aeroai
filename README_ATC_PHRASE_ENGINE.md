@@ -18,6 +18,13 @@ AEROAI_SYSTEM_PROMPT_PATH=prompts/aeroai_system_prompt.txt
 - Readback flow uses `ReadbackValidator`/`ReadbackNormalizer` plus `SpokenNumberNormalizer` and `CallsignValidator` to keep transcripts consistent before hitting the LLM.
 - Debug logging: `AEROAI_LOG_FILE` appends prompt/response blocks; `AEROAI_LOG_API` re-enables the verbose API request/response dump.
 
+## JSON-driven ATC session packs
+- Deterministic intent + session flow is driven by JSON packs under `Data/atc/`:
+  - `Data/atc/intents.json` for intent keywords/examples
+  - `Data/atc/flows.json` for state transitions and handoffs
+  - `Data/atc/templates.json` for deterministic response templates
+- OpenAI is only used as a phrasing helper when no template matches; state transitions remain deterministic from JSON.
+
 ## VoiceLab profiles (regional voices)
 - Profiles live in `voicelab/xtts_service/voices/<voice_id>/meta.json` and control `engine`, `roles`, and `region_codes` for auto selection.
 - AeroAI sends `voice_id="auto"` plus `role` and `facility_icao`; VoiceLab chooses a matching profile based on role + ICAO prefix.

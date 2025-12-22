@@ -18,6 +18,7 @@ public class AeroAiLlmSession : IDisposable
 	private readonly FlightContext _context;
 
 	private readonly PilotIntentParser _intentParser;
+	private readonly AtcSession.AtcSessionManager? _sessionManager;
 
 	private AtcState _state = AtcState.Idle;
 
@@ -59,8 +60,9 @@ public class AeroAiLlmSession : IDisposable
         public AeroAiLlmSession(IAtcResponseGenerator responseGenerator, FlightContext context, Action<string>? onDebug = null)
         {
                 _context = context ?? throw new ArgumentNullException("context");
-                _intentParser = new PilotIntentParser();
                 _responseGenerator = responseGenerator ?? throw new ArgumentNullException(nameof(responseGenerator));
+                _intentParser = new PilotIntentParser();
+                _sessionManager = AtcSession.AtcSessionManager.TryCreate(_responseGenerator, onDebug);
         }
 
 	public async Task<string?> HandlePilotTransmissionAsync(string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
@@ -88,8 +90,18 @@ public class AeroAiLlmSession : IDisposable
 		// Re-check ATIS after normalization (in case normalization improved the text)
 		ExtractAndPersistAtisAcknowledgement(pilotTransmission);
 
-		// Re-check stand/gate after normalization
-		ExtractAndPersistStandGate(pilotTransmission);
+                // Re-check stand/gate after normalization
+                ExtractAndPersistStandGate(pilotTransmission);
+
+		if (_sessionManager != null)
+		{
+			var sessionResult = await _sessionManager.TryHandleAsync(pilotTransmission, _context, cancellationToken);
+			if (sessionResult != null && !string.IsNullOrWhiteSpace(sessionResult.SpokenText))
+			{
+				_lastAtcResponse = sessionResult.SpokenText;
+				return sessionResult.SpokenText;
+			}
+		}
 
 		// STRICT ROUTING PRIORITY (in order):
 		// 1. Pending readback -> handle readback ONLY (no callsign gate, no other routing)

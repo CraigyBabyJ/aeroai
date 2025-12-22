@@ -20,9 +20,9 @@ For each request, you receive:
 
 The CONTEXT_JSON contains fields like:
 
-- controller_role: "CLEARANCE" | "GROUND" | "TOWER_DEPARTURE" | "DEPARTURE" | "CENTER" | "APPROACH" | "TOWER_ARRIVAL" | "GROUND_ARRIVAL"
+- controller_role: "DELIVERY" | "GROUND" | "TOWER_DEPARTURE" | "DEPARTURE" | "CENTER" | "APPROACH" | "TOWER_ARRIVAL" | "GROUND_ARRIVAL"
 
-- phase: high-level phase such as "CLEARANCE", "TAXI_OUT", "LINEUP", "CLIMB", "ENROUTE", "DESCENT", "FINAL", "GO_AROUND", "TAXI_IN"
+- phase: high-level phase such as "DELIVERY", "TAXI_OUT", "LINEUP", "CLIMB", "ENROUTE", "DESCENT", "FINAL", "GO_AROUND", "TAXI_IN"
 
 - flight_info:
 
