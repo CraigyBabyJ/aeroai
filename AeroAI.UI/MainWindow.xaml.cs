@@ -7,11 +7,13 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using System.Text.Json;
 using System.Threading;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using AtcNavDataDemo.Config;
 using AeroAI.Config;
 using AeroAI.Services;
@@ -55,6 +57,24 @@ public partial class MainWindow : Window
     private SolidColorBrush? _idleBadgeBrush;
     private Storyboard? _recordingPulse;
     private bool _debugEnabled;
+    private readonly DebugLogCollector _debugLogCollector;
+    private bool _debugLogAutoScroll = true;
+    private bool _debugLogExpanded = true;
+    private const double DebugLogAutoScrollThreshold = 12.0;
+    private readonly HttpClient _healthHttp = new();
+    private DispatcherTimer? _healthTimer;
+    private bool _healthRefreshBusy;
+    private bool _sttHealthLogged;
+    private string _sttHealthUrl = string.Empty;
+    private SolidColorBrush? _healthOkBrush;
+    private SolidColorBrush? _healthWarnBrush;
+    private SolidColorBrush? _healthOffBrush;
+    private enum HealthState
+    {
+        Offline,
+        Warning,
+        Online
+    }
     private static readonly Lazy<HashSet<string>> AircraftTypes = new(() => LoadAircraftTypes(), isThreadSafe: true);
     private UserConfig _config = new();
     private List<AudioDeviceOption> _micDevices = new();
@@ -68,7 +88,13 @@ public partial class MainWindow : Window
         _atcService.OnFlightContextUpdated += OnFlightContextUpdated;
         _atcService.OnDebug += OnDebugReceived;
         _atcService.OnTtsNotice += OnTtsNoticeReceived;
+        _debugLogCollector = new DebugLogCollector(Dispatcher);
         MessageList.ItemsSource = Messages;
+        if (DebugLogList != null)
+        {
+            DebugLogList.ItemsSource = _debugLogCollector.Entries;
+            _debugLogCollector.Entries.CollectionChanged += DebugLogEntries_CollectionChanged;
+        }
         ConnectedToCombo.ItemsSource = _frequencyOptions;
         ConnectedToCombo.DisplayMemberPath = nameof(FrequencyOption.Display);
         SetFrequencyPlaceholder("Import SimBrief to load frequencies.");
@@ -95,6 +121,9 @@ public partial class MainWindow : Window
         UpdateMaxRestoreIcon();
         InitializeUserConfigAndAudio();
         UpdateTestVoiceButtonState();
+        UpdateDebugLogVisibility();
+        UpdateDebugLogHeader();
+        InitializeHealthIndicators();
 
         if (!_sttService.IsAvailable)
         {
@@ -1069,12 +1098,18 @@ public partial class MainWindow : Window
             disposable.Dispose();
         if (_sttService is IDisposable sttDisposable)
             sttDisposable.Dispose();
+        _healthTimer?.Stop();
+        _healthHttp.Dispose();
         _flightLogService?.Dispose();
         base.OnClosed(e);
     }
 
     private void OnDebugReceived(string message)
     {
+        if (ShouldCollectDebugLogs())
+        {
+            _debugLogCollector.Add(message);
+        }
         if (_debugEnabled)
             AddSystemMessage("[DEBUG] " + message);
     }
@@ -1090,9 +1125,9 @@ public partial class MainWindow : Window
     {
         LoadDotEnvIfPresent();
 
-        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? "whisper").Trim().ToLowerInvariant();
+        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? string.Empty).Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(backend))
-            backend = "whisper";
+            backend = "whisper-fast";
         _sttDebugLog?.Invoke($"[STT] configured backend={backend}");
 
         var whisperCli = new WhisperSttService();
@@ -1100,6 +1135,8 @@ public partial class MainWindow : Window
 
         if (backend == "whisper-fast")
         {
+            var externalMode = string.Equals(Environment.GetEnvironmentVariable("WHISPER_FAST_EXTERNAL"), "1", StringComparison.OrdinalIgnoreCase)
+                               || string.Equals(Environment.GetEnvironmentVariable("WHISPER_FAST_EXTERNAL"), "true", StringComparison.OrdinalIgnoreCase);
             var python = Environment.GetEnvironmentVariable("WHISPER_FAST_PYTHON");
             if (string.IsNullOrWhiteSpace(python))
             {
@@ -1116,27 +1153,26 @@ public partial class MainWindow : Window
             {
                 python = ResolveUpwards(python);
             }
-            var serverPath = ResolveUpwards("whisper-fast\\service.py");
             var model = Environment.GetEnvironmentVariable("WHISPER_FAST_MODEL")
                         ?? "jacktol/whisper-medium.en-fine-tuned-for-ATC-faster-whisper";
+            // Port priority: Environment variable > UserConfig > default
             var portEnv = Environment.GetEnvironmentVariable("WHISPER_FAST_PORT");
-            var port = 8765;
+            var port = 8766;
             if (!string.IsNullOrWhiteSpace(portEnv) && int.TryParse(portEnv, out var parsedPort) && parsedPort > 0)
+            {
                 port = parsedPort;
+            }
+            else if (_config.Stt?.WhisperFastPort > 0)
+            {
+                port = _config.Stt.WhisperFastPort;
+            }
             var device = Environment.GetEnvironmentVariable("WHISPER_FAST_DEVICE") ?? "auto";
             var compute = Environment.GetEnvironmentVariable("WHISPER_FAST_COMPUTE_TYPE") ?? "auto";
             var dllDirs = Environment.GetEnvironmentVariable("WHISPER_FAST_DLL_DIRS") ?? "none";
-            _sttDebugLog?.Invoke($"[STT] whisper-fast config: python=\"{python}\", server=\"{serverPath}\", model=\"{model}\", port={port}, device={device}, compute={compute}, dll_dirs=\"{dllDirs}\"");
-
-            if (IsExecutableCandidate(python) && !string.IsNullOrWhiteSpace(serverPath) && File.Exists(serverPath))
+            if (externalMode)
             {
-                var host = new WhisperFastHost(python, serverPath, model, port, _sttDebugLog);
-                // Start asynchronously at launch; failures will be logged and per-request fallback will use whisper-cli.
-                _ = Task.Run(async () =>
-                {
-                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                    await host.StartAsync(cts.Token);
-                });
+                _sttDebugLog?.Invoke($"[STT] whisper-fast external config: model=\"{model}\", port={port}, device={device}, compute={compute}, dll_dirs=\"{dllDirs}\"");
+                var host = new WhisperFastHost(string.Empty, string.Empty, model, port, _sttDebugLog, externalOnly: true);
                 whisperFast = new WhisperFastSttService(
                     host,
                     _sttDebugLog,
@@ -1145,8 +1181,28 @@ public partial class MainWindow : Window
             }
             else
             {
-                _sttDebugLog?.Invoke("[STT] whisper-fast unavailable (python/server missing), using whisper-cli");
-                backend = "whisper";
+                var serverPath = ResolveUpwards("whisper-fast\\service.py");
+                _sttDebugLog?.Invoke($"[STT] whisper-fast config: python=\"{python}\", server=\"{serverPath}\", model=\"{model}\", port={port}, device={device}, compute={compute}, dll_dirs=\"{dllDirs}\"");
+
+                if (IsExecutableCandidate(python) && !string.IsNullOrWhiteSpace(serverPath) && File.Exists(serverPath))
+                {
+                    var host = new WhisperFastHost(python, serverPath, model, port, _sttDebugLog);
+                    // Start asynchronously at launch; failures will be logged and handled per request.
+                    _ = Task.Run(async () =>
+                    {
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+                        await host.StartAsync(cts.Token);
+                    });
+                    whisperFast = new WhisperFastSttService(
+                        host,
+                        _sttDebugLog,
+                        available: true,
+                        initialPromptProvider: BuildSttInitialPrompt);
+                }
+                else
+                {
+                    _sttDebugLog?.Invoke("[STT] whisper-fast unavailable (python/server missing).");
+                }
             }
         }
 
@@ -1212,9 +1268,9 @@ public partial class MainWindow : Window
 
     private static string BuildSttUnavailableMessage()
     {
-        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? "whisper").Trim().ToLowerInvariant();
+        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? string.Empty).Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(backend))
-            backend = "whisper";
+            backend = "whisper-fast";
         return backend == "whisper-fast"
             ? "Whisper-fast not available. Check WHISPER_FAST_PYTHON, model, and the whisper-fast service."
             : "Whisper not found. Place whisper-cli.exe in /whisper and model in /whisper/models";
@@ -1253,8 +1309,272 @@ public partial class MainWindow : Window
         return !File.Exists(cfgPath);
     }
 
-    private void DebugToggle_Checked(object sender, RoutedEventArgs e) => _debugEnabled = true;
-    private void DebugToggle_Unchecked(object sender, RoutedEventArgs e) => _debugEnabled = false;
+    private void DebugToggle_Checked(object sender, RoutedEventArgs e)
+    {
+        _debugEnabled = true;
+        UpdateDebugLogVisibility();
+    }
+
+    private void DebugToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        _debugEnabled = false;
+        UpdateDebugLogVisibility();
+    }
+
+    private void DebugLogEntries_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (!_debugLogAutoScroll || !_debugLogExpanded || DebugLogScroller == null)
+        {
+            return;
+        }
+
+        DebugLogScroller.ScrollToEnd();
+    }
+
+    private void DebugLogScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (DebugLogScroller == null)
+        {
+            return;
+        }
+
+        var distanceFromBottom = DebugLogScroller.ScrollableHeight - DebugLogScroller.VerticalOffset;
+        _debugLogAutoScroll = distanceFromBottom <= DebugLogAutoScrollThreshold;
+    }
+
+    private void DebugLogToggleButton_Click(object sender, RoutedEventArgs e)
+    {
+        _debugLogExpanded = !_debugLogExpanded;
+        UpdateDebugLogHeader();
+    }
+
+    private void DebugLogClearButton_Click(object sender, RoutedEventArgs e)
+    {
+        _debugLogCollector.Clear();
+    }
+
+    private void UpdateDebugLogHeader()
+    {
+        if (DebugLogToggleButton == null || DebugLogScroller == null)
+        {
+            return;
+        }
+
+        DebugLogToggleButton.Content = _debugLogExpanded ? "v" : ">";
+        DebugLogScroller.Visibility = _debugLogExpanded ? Visibility.Visible : Visibility.Collapsed;
+        if (DebugLogPanel != null)
+        {
+            DebugLogPanel.Height = _debugLogExpanded ? 160 : double.NaN;
+        }
+        if (_debugLogExpanded && _debugLogAutoScroll)
+        {
+            DebugLogScroller.ScrollToEnd();
+        }
+    }
+
+    private void UpdateDebugLogVisibility()
+    {
+        if (DebugLogPanel == null)
+            return;
+        DebugLogPanel.Visibility = ShouldCollectDebugLogs() ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void InitializeHealthIndicators()
+    {
+        _healthOkBrush = TryFindResource("AccentGreenBrush") as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromRgb(0x00, 0xff, 0x88));
+        _healthWarnBrush = TryFindResource("AccentYellowBrush") as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromRgb(0xff, 0xd7, 0x00));
+        _healthOffBrush = TryFindResource("TextSecondaryBrush") as SolidColorBrush
+            ?? new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44));
+
+        _healthTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+        _healthTimer.Tick += async (_, _) => await RefreshHealthIndicatorsAsync();
+        _healthTimer.Start();
+        _ = RefreshHealthIndicatorsAsync();
+    }
+
+    private async Task RefreshHealthIndicatorsAsync()
+    {
+        if (_healthRefreshBusy)
+            return;
+        _healthRefreshBusy = true;
+        try
+        {
+            await UpdateSttHealthAsync();
+            await UpdateTtsHealthAsync();
+            UpdateLlmHealthIndicator();
+            UpdateSimBriefHealthIndicator();
+        }
+        catch
+        {
+            // keep UI stable even if one health probe fails
+        }
+        finally
+        {
+            _healthRefreshBusy = false;
+        }
+    }
+
+    private async Task UpdateSttHealthAsync()
+    {
+        if (SttHealthLight == null)
+            return;
+
+        var backend = (Environment.GetEnvironmentVariable("STT_BACKEND") ?? string.Empty)
+            .Trim()
+            .ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(backend))
+            backend = "whisper-fast";
+
+        if (backend != "whisper-fast")
+        {
+            SetHealthIndicator(SttHealthLight, HealthState.Warning, $"STT backend={backend}");
+            return;
+        }
+
+        var port = ResolveWhisperFastPort();
+        var url = $"http://127.0.0.1:{port}/health";
+        _sttHealthUrl = url;
+        if (!_sttHealthLogged)
+        {
+            _sttDebugLog?.Invoke($"[STT] whisper-fast healthcheck url={url}");
+            _sttHealthLogged = true;
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            var resp = await _healthHttp.GetAsync(url, cts.Token).ConfigureAwait(false);
+            if (!resp.IsSuccessStatusCode)
+            {
+                SetHealthIndicator(SttHealthLight, HealthState.Warning, $"whisper-fast offline ({resp.StatusCode})");
+                return;
+            }
+
+            var json = await resp.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            var ok = TryReadOk(json);
+            SetHealthIndicator(SttHealthLight, ok ? HealthState.Online : HealthState.Warning, ok ? "whisper-fast online" : "whisper-fast unhealthy");
+        }
+        catch (Exception ex)
+        {
+            SetHealthIndicator(SttHealthLight, HealthState.Warning, $"whisper-fast offline: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateTtsHealthAsync()
+    {
+        if (TtsHealthLight == null)
+            return;
+
+        var enabled = _config.Tts?.VoiceLabEnabled ?? true;
+        if (!enabled)
+        {
+            SetHealthIndicator(TtsHealthLight, HealthState.Offline, "VoiceLab disabled");
+            return;
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            var health = await _atcService.GetVoiceLabHealthAsync(cts.Token).ConfigureAwait(false);
+            var baseUrl = _config.Tts?.VoiceLabBaseUrl ?? "http://127.0.0.1:8008";
+            SetHealthIndicator(TtsHealthLight, health.Online ? HealthState.Online : HealthState.Warning,
+                health.Online ? $"VoiceLab online ({baseUrl})" : $"VoiceLab offline ({baseUrl})");
+        }
+        catch (Exception ex)
+        {
+            SetHealthIndicator(TtsHealthLight, HealthState.Warning, $"VoiceLab offline: {ex.Message}");
+        }
+    }
+
+    private void UpdateLlmHealthIndicator()
+    {
+        if (LlmHealthLight == null)
+            return;
+
+        var enabledFlag = Environment.GetEnvironmentVariable("AEROAI_LLM_ENABLED");
+        var enabled = !string.Equals(enabledFlag, "false", StringComparison.OrdinalIgnoreCase)
+                      && !string.Equals(enabledFlag, "0", StringComparison.OrdinalIgnoreCase);
+        var hasKey = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+        var baseUrl = Environment.GetEnvironmentVariable("OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
+
+        if (!enabled)
+        {
+            SetHealthIndicator(LlmHealthLight, HealthState.Offline, "LLM disabled");
+            return;
+        }
+
+        SetHealthIndicator(LlmHealthLight, hasKey ? HealthState.Online : HealthState.Warning,
+            hasKey ? $"LLM configured ({baseUrl})" : "LLM enabled but API key missing");
+    }
+
+    private void UpdateSimBriefHealthIndicator()
+    {
+        if (SimBriefHealthLight == null)
+            return;
+
+        var hasFlight = _atcService.CurrentFlight != null;
+        SetHealthIndicator(SimBriefHealthLight, hasFlight ? HealthState.Online : HealthState.Warning,
+            hasFlight ? "SimBrief loaded" : "SimBrief not loaded");
+    }
+
+    private void SetHealthIndicator(System.Windows.Shapes.Ellipse indicator, HealthState state, string? tooltip)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => SetHealthIndicator(indicator, state, tooltip));
+            return;
+        }
+
+        indicator.Fill = state switch
+        {
+            HealthState.Online => _healthOkBrush ?? indicator.Fill,
+            HealthState.Warning => _healthWarnBrush ?? indicator.Fill,
+            HealthState.Offline => _healthOffBrush ?? indicator.Fill,
+            _ => indicator.Fill
+        };
+        ToolTipService.SetToolTip(indicator, tooltip);
+    }
+
+    private int ResolveWhisperFastPort()
+    {
+        // Priority: Environment variable > UserConfig > default
+        var portEnv = Environment.GetEnvironmentVariable("WHISPER_FAST_PORT");
+        if (!string.IsNullOrWhiteSpace(portEnv) && int.TryParse(portEnv, out var port) && port > 0)
+            return port;
+        if (_config.Stt?.WhisperFastPort > 0)
+            return _config.Stt.WhisperFastPort;
+        return 8766;
+    }
+
+    private static bool TryReadOk(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("ok", out var okElem) && okElem.ValueKind == JsonValueKind.True)
+                return true;
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
+    }
+
+    private bool ShouldCollectDebugLogs()
+    {
+#if DEBUG
+        return true;
+#else
+        return _debugEnabled;
+#endif
+    }
 
     private bool ContainsAircraftType(string text)
     {

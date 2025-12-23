@@ -322,6 +322,30 @@
                                 Click="TestVoiceButton_Click"/>
                     </StackPanel>
                 </Border>
+
+                <Border Background="#2a2a4a" CornerRadius="4" Padding="12,8" Margin="15,0,0,0">
+                    <StackPanel>
+                        <TextBlock Text="Health" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+                                <Ellipse x:Name="SttHealthLight" Width="8" Height="8" Fill="#444444" Margin="0,0,4,0"/>
+                                <TextBlock Text="STT" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+                                <Ellipse x:Name="TtsHealthLight" Width="8" Height="8" Fill="#444444" Margin="0,0,4,0"/>
+                                <TextBlock Text="TTS" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+                                <Ellipse x:Name="LlmHealthLight" Width="8" Height="8" Fill="#444444" Margin="0,0,4,0"/>
+                                <TextBlock Text="LLM" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="SimBriefHealthLight" Width="8" Height="8" Fill="#444444" Margin="0,0,4,0"/>
+                                <TextBlock Text="SimBrief" FontSize="10" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </Border>
         
@@ -422,10 +446,11 @@
         <!-- Message History -->
         <Border x:Name="MessagesPanel" Grid.Row="4" Margin="10,0" CornerRadius="8" Background="{StaticResource BackgroundMediumBrush}">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
                 <Border x:Name="HandoffPromptPanel" Grid.Row="0" Background="#23334d" CornerRadius="6" Padding="10,6" Margin="10,8,10,0" Visibility="Collapsed">
                     <TextBlock x:Name="HandoffPromptText" Foreground="{StaticResource AccentYellowBrush}" FontSize="12" TextWrapping="Wrap"/>
                 </Border>
@@ -482,6 +507,73 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+                <Border x:Name="DebugLogPanel" Grid.Row="2" Background="#1c2638" CornerRadius="6"
+                        Margin="10,8,10,10" Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <DockPanel Grid.Row="0" Margin="10,6,10,4">
+                            <Button x:Name="DebugLogToggleButton"
+                                    Content="v"
+                                    Width="18"
+                                    Height="18"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource NavButton}"
+                                    Padding="0"
+                                    Click="DebugLogToggleButton_Click"/>
+                            <TextBlock Text="Debug Log"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"/>
+                            <Button x:Name="DebugLogClearButton"
+                                    Content="Clear"
+                                    Style="{StaticResource NavButton}"
+                                    Padding="6,2"
+                                    Margin="8,0,0,0"
+                                    HorizontalAlignment="Right"
+                                    DockPanel.Dock="Right"
+                                    Click="DebugLogClearButton_Click"/>
+                        </DockPanel>
+                        <ScrollViewer Grid.Row="1"
+                                      x:Name="DebugLogScroller"
+                                      VerticalScrollBarVisibility="Auto"
+                                      ScrollChanged="DebugLogScroller_ScrollChanged">
+                            <ItemsControl x:Name="DebugLogList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="10,2,10,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       FontSize="11"/>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Level}"
+                                                       Foreground="{StaticResource AccentYellowBrush}"
+                                                       FontSize="11"/>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Category}"
+                                                       Foreground="{StaticResource AccentCyanBrush}"
+                                                       FontSize="11"/>
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding Message}"
+                                                       Foreground="{StaticResource TextPrimaryBrush}"
+                                                       FontSize="11"
+                                                       TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
             </Grid>
         </Border>
         

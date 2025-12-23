@@ -152,7 +152,23 @@ public sealed class SettingsViewModel : INotifyPropertyChanged, IDisposable
         set
         {
             if (SetField(ref _voiceLabBaseUrl, value))
+            {
+                // Extract port from URL when it changes
+                try
+                {
+                    var uri = new Uri(_voiceLabBaseUrl);
+                    if (uri.Port > 0 && _voiceLabPort != uri.Port)
+                    {
+                        _voiceLabPort = uri.Port;
+                        OnPropertyChanged(nameof(VoiceLabPort));
+                    }
+                }
+                catch
+                {
+                    // Ignore invalid URLs
+                }
                 RefreshVoiceLabHealthAsync();
+            }
         }
     }
 
@@ -161,6 +177,76 @@ public sealed class SettingsViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _voiceLabHealthStatus;
         set => SetField(ref _voiceLabHealthStatus, value);
+    }
+
+    private int _whisperFastPort = 8766;
+    public int WhisperFastPort
+    {
+        get => _whisperFastPort;
+        set
+        {
+            // Validate port range
+            if (value < 1 || value > 65535)
+                return;
+            if (SetField(ref _whisperFastPort, value))
+            {
+                OnPropertyChanged(nameof(WhisperFastPortString));
+                StatusText = string.Empty;
+            }
+        }
+    }
+
+    public string WhisperFastPortString
+    {
+        get => _whisperFastPort.ToString();
+        set
+        {
+            if (int.TryParse(value, out var port) && port >= 1 && port <= 65535)
+            {
+                WhisperFastPort = port;
+            }
+        }
+    }
+
+    private int _voiceLabPort = 8008;
+    public int VoiceLabPort
+    {
+        get => _voiceLabPort;
+        set
+        {
+            // Validate port range
+            if (value < 1 || value > 65535)
+                return;
+            if (SetField(ref _voiceLabPort, value))
+            {
+                OnPropertyChanged(nameof(VoiceLabPortString));
+                // Update base URL when port changes
+                UpdateVoiceLabBaseUrlFromPort();
+                StatusText = string.Empty;
+            }
+        }
+    }
+
+    public string VoiceLabPortString
+    {
+        get => _voiceLabPort.ToString();
+        set
+        {
+            if (int.TryParse(value, out var port) && port >= 1 && port <= 65535)
+            {
+                VoiceLabPort = port;
+            }
+        }
+    }
+
+    private void UpdateVoiceLabBaseUrlFromPort()
+    {
+        var uri = new Uri(VoiceLabBaseUrl);
+        var newUrl = $"{uri.Scheme}://{uri.Host}:{VoiceLabPort}";
+        if (VoiceLabBaseUrl != newUrl)
+        {
+            VoiceLabBaseUrl = newUrl;
+        }
     }
 
     public ICommand SaveCommand { get; }
@@ -187,6 +273,19 @@ public sealed class SettingsViewModel : INotifyPropertyChanged, IDisposable
         _voiceLabBaseUrl = string.IsNullOrWhiteSpace(_config.Tts?.VoiceLabBaseUrl)
             ? "http://127.0.0.1:8008"
             : _config.Tts!.VoiceLabBaseUrl;
+        
+        // Extract port from VoiceLab base URL
+        try
+        {
+            var uri = new Uri(_voiceLabBaseUrl);
+            _voiceLabPort = uri.Port > 0 ? uri.Port : 8008;
+        }
+        catch
+        {
+            _voiceLabPort = 8008;
+        }
+        
+        _whisperFastPort = _config.Stt?.WhisperFastPort ?? 8766;
         
         if (_recorder != null)
         {
@@ -355,6 +454,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged, IDisposable
         _config.Audio.AtcVolumePercent = AtcVolumePercent;
         _config.Tts.VoiceLabEnabled = VoiceLabEnabled;
         _config.Tts.VoiceLabBaseUrl = VoiceLabBaseUrl?.Trim() ?? "http://127.0.0.1:8008";
+        if (_config.Stt == null)
+            _config.Stt = new SttConfig();
+        _config.Stt.WhisperFastPort = WhisperFastPort;
         UserConfigStore.Save(_config);
         _applyCallback?.Invoke(_config.Audio.MicrophoneDeviceId, _config.Audio.OutputDeviceId, MicGainDb, 
                                 _config.Audio.AtcOutputDeviceId, AtcVolumePercent);

@@ -47,14 +47,27 @@ public class SpokenNumberNormalizerTests
 		Assert.Equal(expected, result);
 	}
 
-	[Theory]
-	[InlineData("one one three", "113")]
-	[InlineData("one four one three", "1413")]
-	[InlineData("three seven niner", "379")]
-	public void ConvertSpokenSequenceToDigits(string input, string expected)
-	{
-		var result = SpokenNumberNormalizer.ConvertSpokenSequenceToDigits(input);
-		Assert.Equal(expected, result);
-	}
+    [Theory]
+    [InlineData("one one three", "113")]
+    [InlineData("one four one three", "1413")]
+    [InlineData("three seven niner", "379")]
+    public void ConvertSpokenSequenceToDigits(string input, string expected)
+    {
+        var result = SpokenNumberNormalizer.ConvertSpokenSequenceToDigits(input);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void CallsignNormalization_PreservesSuffixLetters()
+    {
+        var withSuffix = SpokenNumberNormalizer.Normalize("speedbird four romeo");
+        Assert.Equal("speedbird 4 romeo", withSuffix);
+
+        var ninerSuffix = SpokenNumberNormalizer.Normalize("lufthansa three seven niner romeo");
+        Assert.Equal("lufthansa 379 romeo", ninerSuffix);
+
+        var alphanumeric = SpokenNumberNormalizer.Normalize("november one two three alpha bravo");
+        Assert.Equal("november one two three alpha bravo", alphanumeric);
+    }
 }
 

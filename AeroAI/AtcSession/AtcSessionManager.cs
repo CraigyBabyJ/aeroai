@@ -86,11 +86,26 @@ public sealed class AtcSessionManager
         var intent = await _intentEngine.ClassifyAsync(pilotTransmission, intentContext, ct);
 
         var decision = _flowEngine.Resolve(_state, intent);
+        var isHandoffCheckin = intent.IntentId.Equals("HANDOFF_CHECKIN", StringComparison.OrdinalIgnoreCase);
+        var pendingBefore = _state.PendingHandoff;
+        string? mentionedRole = null;
+        string? mentionedFrequency = null;
+        if (isHandoffCheckin)
+        {
+            if (TryExtractRoleMention(pilotTransmission, out var roleValue))
+            {
+                mentionedRole = roleValue;
+            }
+            if (TryExtractFrequencyMention(pilotTransmission, out var frequencyValue))
+            {
+                mentionedFrequency = frequencyValue;
+            }
+        }
 
         var templateData = BuildTemplateData(flightContext, intent, decision, _state);
         var preRole = ResolveActiveControllerRole();
 
-        if (ShouldRejectHandoff(intent, pilotTransmission, _state.PendingHandoff))
+        if (ShouldRejectHandoff(intent, pilotTransmission, pendingBefore))
         {
             var reissueDecision = decision with
             {
@@ -106,6 +121,15 @@ public sealed class AtcSessionManager
             var text = reissue?.Text ?? BuildHandoffReissueFallback(templateData);
             ApplyState(reissueDecision, intent, text, flightContext, allowHandoffCommit: false);
             var responseRole = ResolveActiveControllerRole();
+            if (isHandoffCheckin)
+            {
+                LogHandoffCheckinOutcome(
+                    pendingBefore,
+                    mentionedRole,
+                    mentionedFrequency,
+                    committed: false,
+                    reasonOverride: "role_mismatch");
+            }
             return new AtcSessionResult(text, responseRole, false, Array.Empty<string>(), _state, intent);
         }
 
@@ -120,11 +144,20 @@ public sealed class AtcSessionManager
         {
             ApplyState(decision, intent, rendered.Text, flightContext);
             var responseRole = ResolveActiveControllerRole();
+            if (isHandoffCheckin)
+            {
+                var committed = decision.CommitPendingHandoff && pendingBefore != null;
+                LogHandoffCheckinOutcome(pendingBefore, mentionedRole, mentionedFrequency, committed);
+            }
             return new AtcSessionResult(rendered.Text, responseRole, rendered.RequiresReadback, rendered.ReadbackItems, _state, intent);
         }
 
         if (_responseGenerator == null)
         {
+            if (isHandoffCheckin)
+            {
+                LogHandoffCheckinOutcome(pendingBefore, mentionedRole, mentionedFrequency, committed: false);
+            }
             return null;
         }
 
@@ -143,10 +176,19 @@ public sealed class AtcSessionManager
         if (!string.IsNullOrWhiteSpace(response.SpokenText))
         {
             ApplyState(decision, intent, response.SpokenText, flightContext);
-        var responseRole = ResolveActiveControllerRole();
-        return new AtcSessionResult(response.SpokenText, responseRole, false, Array.Empty<string>(), _state, intent);
+            var responseRole = ResolveActiveControllerRole();
+            if (isHandoffCheckin)
+            {
+                var committed = decision.CommitPendingHandoff && pendingBefore != null;
+                LogHandoffCheckinOutcome(pendingBefore, mentionedRole, mentionedFrequency, committed);
+            }
+            return new AtcSessionResult(response.SpokenText, responseRole, false, Array.Empty<string>(), _state, intent);
         }
 
+        if (isHandoffCheckin)
+        {
+            LogHandoffCheckinOutcome(pendingBefore, mentionedRole, mentionedFrequency, committed: false);
+        }
         return null;
     }
 
@@ -511,6 +553,84 @@ public sealed class AtcSessionManager
         }
 
         return true;
+    }
+
+    private static bool TryExtractFrequencyMention(string pilotTransmission, out string frequency)
+    {
+        frequency = string.Empty;
+        if (string.IsNullOrWhiteSpace(pilotTransmission))
+        {
+            return false;
+        }
+
+        var match = Regex.Match(pilotTransmission, @"\b\d{3}\.\d{3}\b", RegexOptions.IgnoreCase);
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        frequency = match.Value;
+        return true;
+    }
+
+    private void LogHandoffCheckinOutcome(
+        PendingHandoff? pending,
+        string? mentionedRole,
+        string? mentionedFrequency,
+        bool committed,
+        string? reasonOverride = null)
+    {
+        if (_onDebug == null)
+        {
+            return;
+        }
+
+        var reason = reasonOverride ?? ResolveHandoffCheckinReason(pending, mentionedRole, mentionedFrequency, committed);
+        var pendingRole = !string.IsNullOrWhiteSpace(pending?.TargetRole) ? pending!.TargetRole : "none";
+        var pendingFrequency = !string.IsNullOrWhiteSpace(pending?.TargetFrequencyMhz) ? pending!.TargetFrequencyMhz : "none";
+        var roleText = !string.IsNullOrWhiteSpace(mentionedRole) ? mentionedRole : "none";
+        var freqText = !string.IsNullOrWhiteSpace(mentionedFrequency) ? mentionedFrequency : "none";
+        var hasPending = pending != null ? "yes" : "no";
+
+        _onDebug($"[ATC] HANDOFF_CHECKIN reason={reason} pending={hasPending} pending_role={pendingRole} pending_freq={pendingFrequency} mentioned_role={roleText} mentioned_freq={freqText}");
+    }
+
+    private static string ResolveHandoffCheckinReason(
+        PendingHandoff? pending,
+        string? mentionedRole,
+        string? mentionedFrequency,
+        bool committed)
+    {
+        if (committed)
+        {
+            return "ok";
+        }
+
+        if (pending == null)
+        {
+            return "no_pending";
+        }
+
+        if (!string.IsNullOrWhiteSpace(mentionedRole) &&
+            !string.IsNullOrWhiteSpace(pending.TargetRole) &&
+            !mentionedRole.Equals(pending.TargetRole, StringComparison.OrdinalIgnoreCase))
+        {
+            return "role_mismatch";
+        }
+
+        if (string.IsNullOrWhiteSpace(mentionedRole))
+        {
+            return "role_missing";
+        }
+
+        if (!string.IsNullOrWhiteSpace(mentionedFrequency) &&
+            !string.IsNullOrWhiteSpace(pending.TargetFrequencyMhz) &&
+            !string.Equals(mentionedFrequency, pending.TargetFrequencyMhz, StringComparison.OrdinalIgnoreCase))
+        {
+            return "freq_mismatch";
+        }
+
+        return "role_missing";
     }
 
     private static string BuildHandoffReissueFallback(IReadOnlyDictionary<string, string> templateData)

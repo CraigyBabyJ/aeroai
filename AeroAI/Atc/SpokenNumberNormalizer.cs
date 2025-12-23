@@ -103,12 +103,14 @@ public static class SpokenNumberNormalizer
 			var pattern = $@"\b{Regex.Escape(airline)}\s+((?:(?:{GetSpokenNumberPattern()})\s*)+)";
 			result = Regex.Replace(result, pattern, match =>
 			{
-				var airlinePart = airline;
-				var numberPart = match.Groups[1].Value;
-				var digits = ConvertSpokenSequenceToDigits(numberPart);
-				return $"{airlinePart} {digits}";
-			}, RegexOptions.IgnoreCase);
-		}
+                        var airlinePart = airline;
+                        var numberPart = match.Groups[1].Value;
+                        var digits = ConvertSpokenSequenceToDigits(numberPart);
+                        var hasTrailingSpace = Regex.IsMatch(numberPart, @"\s+$");
+                        var suffix = hasTrailingSpace ? " " : string.Empty;
+                        return $"{airlinePart} {digits}{suffix}";
+                }, RegexOptions.IgnoreCase);
+        }
 
 		// Also handle end-of-transmission pattern: spoken digits at the end
 		// This catches callsigns without explicit airline prefix that end with numbers

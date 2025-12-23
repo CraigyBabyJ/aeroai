@@ -18,6 +18,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Title -->
@@ -200,14 +201,39 @@
                          BorderBrush="{StaticResource BackgroundLightBrush}"
                          BorderThickness="1"
                          Padding="8,4"/>
+                <TextBlock Text="Port" Opacity="0.8" Margin="0,12,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Text="{Binding VoiceLabPortString, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#2a2a4a"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BackgroundLightBrush}"
+                         BorderThickness="1"
+                         Padding="8,4"/>
                 <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
                     <TextBlock Text="Health" Opacity="0.8" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,8,0"/>
                     <TextBlock Text="{Binding VoiceLabHealthStatus}" Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"/>
                 </StackPanel>
             </StackPanel>
 
+            <!-- Whisper-Fast STT Section -->
+            <StackPanel Grid.Row="4" Margin="0,32,0,0" MaxWidth="460" HorizontalAlignment="Left">
+                <TextBlock Text="Whisper-Fast STT" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="Port" Opacity="0.8" Margin="0,0,0,6" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <TextBox Text="{Binding WhisperFastPortString, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#2a2a4a"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BackgroundLightBrush}"
+                         BorderThickness="1"
+                         Padding="8,4"/>
+                <TextBlock Text="Note: Restart whisper-fast service after changing port" 
+                           Opacity="0.7" 
+                           Margin="0,6,0,0" 
+                           FontSize="11"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
             <!-- Save Button -->
-            <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,24,0,0">
+            <StackPanel Grid.Row="5" Orientation="Horizontal" Margin="0,24,0,0">
                 <Button Content="Save" Command="{Binding SaveCommand}" MinWidth="120" Style="{DynamicResource PrimaryNavButton}" Padding="12,8"/>
                 <TextBlock Text="{Binding StatusText}" Margin="12,8,0,0" Opacity="0.8" Foreground="{StaticResource AccentGreenBrush}" FontWeight="SemiBold"/>
             </StackPanel>

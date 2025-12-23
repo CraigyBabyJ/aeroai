@@ -11,6 +11,7 @@ public sealed class UserConfig
     public string SimBriefUsername { get; set; } = string.Empty;
     public AudioConfig Audio { get; set; } = new();
     public TtsConfig Tts { get; set; } = new();
+    public SttConfig Stt { get; set; } = new();
     public string AtcTextProvider { get; set; } = "openai";
 }
 
@@ -39,6 +40,14 @@ public sealed class TtsConfig
 {
     public bool VoiceLabEnabled { get; set; } = true;
     public string VoiceLabBaseUrl { get; set; } = "http://127.0.0.1:8008";
+}
+
+public sealed class SttConfig
+{
+    /// <summary>
+    /// Whisper-fast STT service port. Default: 8766.
+    /// </summary>
+    public int WhisperFastPort { get; set; } = 8766;
 }
 
 public static class UserConfigStore
@@ -70,6 +79,8 @@ public static class UserConfigStore
                 config.Audio = new AudioConfig();
             if (config.Tts == null)
                 config.Tts = new TtsConfig();
+            if (config.Stt == null)
+                config.Stt = new SttConfig();
             if (string.IsNullOrWhiteSpace(config.AtcTextProvider))
                 config.AtcTextProvider = "openai";
             return config;

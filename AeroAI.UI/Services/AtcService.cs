@@ -727,7 +727,7 @@ public class AtcService : IDisposable
         // Fetch from SimBrief, then cache.
         try
         {
-            var client = new SimBriefClient(_httpClient);
+            using var client = new SimBriefClient();
             var ofp = await client.FetchLatestFlightPlanAsync(pilotId);
             if (ofp != null)
             {

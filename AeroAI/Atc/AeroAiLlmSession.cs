@@ -57,12 +57,15 @@ public class AeroAiLlmSession : IDisposable
 		}
 	}
 
+        private readonly Action<string>? _onDebug;
+
         public AeroAiLlmSession(IAtcResponseGenerator responseGenerator, FlightContext context, Action<string>? onDebug = null)
         {
                 _context = context ?? throw new ArgumentNullException("context");
                 _responseGenerator = responseGenerator ?? throw new ArgumentNullException(nameof(responseGenerator));
                 _intentParser = new PilotIntentParser();
                 _sessionManager = AtcSession.AtcSessionManager.TryCreate(_responseGenerator, onDebug);
+                _onDebug = onDebug;
         }
 
 	public async Task<string?> HandlePilotTransmissionAsync(string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
@@ -90,8 +93,17 @@ public class AeroAiLlmSession : IDisposable
 		// Re-check ATIS after normalization (in case normalization improved the text)
 		ExtractAndPersistAtisAcknowledgement(pilotTransmission);
 
-                // Re-check stand/gate after normalization
+		// Re-check stand/gate after normalization
                 ExtractAndPersistStandGate(pilotTransmission);
+
+		// PROCEDURAL INTENT ROUTING: Check for procedural intents (e.g., radio checks) BEFORE any LLM routing
+		// These must bypass the LLM entirely and use hard-coded responses
+		var proceduralResult = ProceduralIntentRouter.TryMatch(pilotTransmission, _context, _onDebug);
+		if (proceduralResult.Matched && !string.IsNullOrWhiteSpace(proceduralResult.ResponseText))
+		{
+			_lastAtcResponse = proceduralResult.ResponseText;
+			return proceduralResult.ResponseText;
+		}
 
 		if (_sessionManager != null)
 		{

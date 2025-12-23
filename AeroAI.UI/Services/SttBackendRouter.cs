@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace AeroAI.UI.Services;
 
 /// <summary>
-/// Routes STT requests to the configured backend, with automatic fallback to whisper-cli.
+/// Routes STT requests to the configured backend.
 /// </summary>
 internal sealed class SttBackendRouter : ISttService, IDisposable
 {
@@ -18,7 +18,9 @@ internal sealed class SttBackendRouter : ISttService, IDisposable
 
     private readonly string _backend;
 
-    public bool IsAvailable => _backend == "whisper" ? _whisperCli.IsAvailable : (_whisperFast?.IsAvailable ?? false) || _whisperCli.IsAvailable;
+    public bool IsAvailable => _backend == "whisper"
+        ? _whisperCli.IsAvailable
+        : (_whisperFast?.IsAvailable ?? false);
 
     public SttBackendRouter(ISttService whisperCli, ISttService? whisperFast, string backend, Action<string>? log = null)
     {
@@ -30,26 +32,29 @@ internal sealed class SttBackendRouter : ISttService, IDisposable
 
     public async Task<string?> TranscribeAsync(string wavPath, CancellationToken cancellationToken)
     {
-        // Prefer configured backend; fall back to whisper-cli on any failure.
-        if (_backend == "whisper-fast" && _whisperFast != null)
+        // Prefer configured backend.
+        if (_backend == "whisper-fast")
         {
+            if (_whisperFast == null)
+            {
+                _log?.Invoke("[STT] whisper-fast unavailable (host not configured).");
+                throw new InvalidOperationException("whisper-fast not available.");
+            }
+
             try
             {
                 _log?.Invoke("[STT] backend=whisper-fast");
                 var text = await _whisperFast.TranscribeAsync(wavPath, cancellationToken).ConfigureAwait(false);
                 return text;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception ex)
             {
-                if (_whisperCli.IsAvailable)
-                {
-                    _log?.Invoke($"[STT] fallback to whisper-cli: {ex.GetType().Name}: {ex.Message}");
-                }
-                else
-                {
-                    _log?.Invoke($"[STT] whisper-fast failed and whisper-cli unavailable: {ex.GetType().Name}: {ex.Message}");
-                    throw new InvalidOperationException($"whisper-fast failed: {ex.Message}. whisper-cli not available.");
-                }
+                _log?.Invoke($"[STT] whisper-fast failed: {ex.GetType().Name}: {ex.Message}");
+                throw new InvalidOperationException($"whisper-fast failed: {ex.Message}");
             }
         }
 

@@ -119,6 +119,77 @@ public class AtcSessionEngineTests
     }
 
     [Fact]
+    public async Task HandoffFlow_PendingHandoffDoesNotChangeActiveUntilCheckin()
+    {
+        var packs = new AtcJsonPackLoader().TryLoadAll();
+        Assert.NotNull(packs);
+
+        var manager = new AtcSessionManager(packs!, responseGenerator: null);
+        var flight = new FlightContext
+        {
+            Callsign = "TEST 123",
+            OriginIcao = "EGLL",
+            DestinationIcao = "EGKK",
+            CurrentAtcUnit = AtcUnit.ClearanceDelivery,
+            CurrentPhase = FlightPhase.Preflight_Clearance,
+            CurrentFrequency = "121.975",
+            CruiseFlightLevel = 350
+        };
+
+        var first = await manager.TryHandleAsync("Cleared to EGKK as filed", flight);
+        Assert.NotNull(first);
+        Assert.NotNull(first!.State.PendingHandoff);
+        Assert.Equal("delivery", first.State.ActiveControllerRole);
+        Assert.Equal("clearance", first.State.CurrentPhase);
+        Assert.Equal("121.975", first.State.ActiveFrequencyMhz);
+
+        var pendingFrequency = first.State.PendingHandoff!.TargetFrequencyMhz;
+        var second = await manager.TryHandleAsync("Ground, TEST 123 with you", flight);
+        Assert.NotNull(second);
+        Assert.Null(second!.State.PendingHandoff);
+        Assert.Equal("ground", second.State.ActiveControllerRole);
+        Assert.Equal("ground", second.State.CurrentPhase);
+        if (!string.IsNullOrWhiteSpace(pendingFrequency))
+        {
+            Assert.Equal(pendingFrequency, second.State.ActiveFrequencyMhz);
+        }
+    }
+
+    [Fact]
+    public async Task HandoffFlow_CheckinWrongRole_DoesNotCommitPendingHandoff()
+    {
+        var packs = new AtcJsonPackLoader().TryLoadAll();
+        Assert.NotNull(packs);
+
+        var manager = new AtcSessionManager(packs!, responseGenerator: null);
+        var flight = new FlightContext
+        {
+            Callsign = "TEST 123",
+            OriginIcao = "EGLL",
+            DestinationIcao = "EGKK",
+            CurrentAtcUnit = AtcUnit.Ground,
+            CurrentPhase = FlightPhase.Taxi_Out,
+            CurrentFrequency = "121.700",
+            CruiseFlightLevel = 350
+        };
+
+        var first = await manager.TryHandleAsync("Ready for departure runway 27", flight);
+        Assert.NotNull(first);
+        Assert.NotNull(first!.State.PendingHandoff);
+        Assert.Equal("tower", first.State.PendingHandoff!.TargetRole);
+        Assert.Equal("ground", first.State.ActiveControllerRole);
+        Assert.Equal("ground", first.State.CurrentPhase);
+        Assert.Equal("121.700", first.State.ActiveFrequencyMhz);
+
+        var second = await manager.TryHandleAsync("Ground, TEST 123 with you", flight);
+        Assert.NotNull(second);
+        Assert.NotNull(second!.State.PendingHandoff);
+        Assert.Equal("ground", second.State.ActiveControllerRole);
+        Assert.Equal("ground", second.State.CurrentPhase);
+        Assert.Equal("121.700", second.State.ActiveFrequencyMhz);
+    }
+
+    [Fact]
     public void TemplateRenderer_AllowsMissingOptionalSlots()
     {
         var packs = new AtcJsonPackLoader().TryLoadAll();

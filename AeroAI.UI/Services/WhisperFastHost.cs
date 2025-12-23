@@ -13,6 +13,9 @@ namespace AeroAI.UI.Services;
 /// </summary>
 internal sealed class WhisperFastHost : IDisposable
 {
+    private const int StartupDelayMs = 250;
+    private const int StartupMaxAttempts = 120;
+    private const int ExternalStartupMaxAttempts = 120;
     private readonly string _pythonPath;
     private readonly string _serverPath;
     private readonly string _modelName;
@@ -20,20 +23,34 @@ internal sealed class WhisperFastHost : IDisposable
     private readonly Action<string>? _log;
     private Process? _process;
     private readonly HttpClient _httpClient = new();
+    private readonly bool _externalOnly;
 
-    public WhisperFastHost(string pythonPath, string serverPath, string modelName, int port, Action<string>? log = null)
+    public WhisperFastHost(
+        string pythonPath,
+        string serverPath,
+        string modelName,
+        int port,
+        Action<string>? log = null,
+        bool externalOnly = false)
     {
         _pythonPath = pythonPath;
         _serverPath = serverPath;
         _modelName = modelName;
         Port = port;
         _log = log;
+        _externalOnly = externalOnly;
     }
 
     public async Task<bool> StartAsync(CancellationToken cancellationToken)
     {
+        if (_externalOnly)
+        {
+            _log?.Invoke("[STT] whisper-fast external mode: healthcheck only");
+            return await WaitForHealthyAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+
         if (_process is { HasExited: false })
-            return true;
+            return await WaitForHealthyAsync(cancellationToken).ConfigureAwait(false);
 
         Stop();
 
@@ -93,45 +110,7 @@ internal sealed class WhisperFastHost : IDisposable
             return false;
         }
 
-        var healthUrl = $"http://127.0.0.1:{Port}/health";
-        for (int i = 0; i < 20 && !cancellationToken.IsCancellationRequested; i++)
-        {
-            await Task.Delay(250, cancellationToken).ConfigureAwait(false);
-            if (_process.HasExited)
-            {
-                _log?.Invoke($"[STT] whisper-fast exited during startup (exit {_process.ExitCode})");
-                return false;
-            }
-
-            try
-            {
-                var resp = await _httpClient.GetAsync(healthUrl, cancellationToken).ConfigureAwait(false);
-                if (resp.IsSuccessStatusCode)
-                {
-                    var json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                    try
-                    {
-                        using var doc = System.Text.Json.JsonDocument.Parse(json);
-                        if (doc.RootElement.TryGetProperty("ok", out var okElem) && okElem.ValueKind == System.Text.Json.JsonValueKind.True)
-                        {
-                            _log?.Invoke("[STT] whisper-fast started");
-                            return true;
-                        }
-                    }
-                    catch
-                    {
-                        // ignore parse failure; retry
-                    }
-                }
-            }
-            catch
-            {
-                // keep retrying
-            }
-        }
-
-        _log?.Invoke("[STT] whisper-fast healthcheck failed");
-        return false;
+        return await WaitForHealthyAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void AttachOutputHandlers(Process process)
@@ -178,6 +157,55 @@ internal sealed class WhisperFastHost : IDisposable
         var combined = string.Join(Path.PathSeparator, allDirs) + Path.PathSeparator + existing;
         psi.Environment["PATH"] = combined;
         _log?.Invoke($"[STT] whisper-fast PATH extended with: {string.Join(", ", allDirs)}");
+    }
+
+    private async Task<bool> WaitForHealthyAsync(CancellationToken cancellationToken)
+    {
+        var healthUrl = $"http://127.0.0.1:{Port}/health";
+        var maxAttempts = _externalOnly ? ExternalStartupMaxAttempts : StartupMaxAttempts;
+        for (int i = 0; i < maxAttempts && !cancellationToken.IsCancellationRequested; i++)
+        {
+            await Task.Delay(StartupDelayMs, cancellationToken).ConfigureAwait(false);
+            if (!_externalOnly)
+            {
+                if (_process == null)
+                    return false;
+                if (_process.HasExited)
+                {
+                    _log?.Invoke($"[STT] whisper-fast exited during startup (exit {_process.ExitCode})");
+                    return false;
+                }
+            }
+
+            try
+            {
+                var resp = await _httpClient.GetAsync(healthUrl, cancellationToken).ConfigureAwait(false);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        if (doc.RootElement.TryGetProperty("ok", out var okElem) && okElem.ValueKind == System.Text.Json.JsonValueKind.True)
+                        {
+                            _log?.Invoke("[STT] whisper-fast started");
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // ignore parse failure; retry
+                    }
+                }
+            }
+            catch
+            {
+                // keep retrying
+            }
+        }
+
+        _log?.Invoke("[STT] whisper-fast healthcheck failed");
+        return false;
     }
 
     private static string[] SplitPaths(string? value)
