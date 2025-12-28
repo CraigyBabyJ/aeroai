@@ -58,9 +58,7 @@ public partial class MainWindow : Window
     private Storyboard? _recordingPulse;
     private bool _debugEnabled;
     private readonly DebugLogCollector _debugLogCollector;
-    private bool _debugLogAutoScroll = true;
-    private bool _debugLogExpanded = true;
-    private const double DebugLogAutoScrollThreshold = 12.0;
+    private DebugLogWindow? _debugLogWindow;
     private readonly HttpClient _healthHttp = new();
     private DispatcherTimer? _healthTimer;
     private bool _healthRefreshBusy;
@@ -90,11 +88,6 @@ public partial class MainWindow : Window
         _atcService.OnTtsNotice += OnTtsNoticeReceived;
         _debugLogCollector = new DebugLogCollector(Dispatcher);
         MessageList.ItemsSource = Messages;
-        if (DebugLogList != null)
-        {
-            DebugLogList.ItemsSource = _debugLogCollector.Entries;
-            _debugLogCollector.Entries.CollectionChanged += DebugLogEntries_CollectionChanged;
-        }
         ConnectedToCombo.ItemsSource = _frequencyOptions;
         ConnectedToCombo.DisplayMemberPath = nameof(FrequencyOption.Display);
         SetFrequencyPlaceholder("Import SimBrief to load frequencies.");
@@ -121,8 +114,6 @@ public partial class MainWindow : Window
         UpdateMaxRestoreIcon();
         InitializeUserConfigAndAudio();
         UpdateTestVoiceButtonState();
-        UpdateDebugLogVisibility();
-        UpdateDebugLogHeader();
         InitializeHealthIndicators();
 
         if (!_sttService.IsAvailable)
@@ -1332,71 +1323,29 @@ public partial class MainWindow : Window
     private void DebugToggle_Checked(object sender, RoutedEventArgs e)
     {
         _debugEnabled = true;
-        UpdateDebugLogVisibility();
     }
 
     private void DebugToggle_Unchecked(object sender, RoutedEventArgs e)
     {
         _debugEnabled = false;
-        UpdateDebugLogVisibility();
     }
 
-    private void DebugLogEntries_CollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    private void ShowDebugLog_Click(object sender, RoutedEventArgs e)
     {
-        if (!_debugLogAutoScroll || !_debugLogExpanded || DebugLogScroller == null)
+        if (_debugLogWindow == null || !_debugLogWindow.IsLoaded)
         {
-            return;
+            _debugLogWindow = new DebugLogWindow(_debugLogCollector);
+            _debugLogWindow.Closed += (s, args) => _debugLogWindow = null;
+            _debugLogWindow.Show();
         }
-
-        DebugLogScroller.ScrollToEnd();
-    }
-
-    private void DebugLogScroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        if (DebugLogScroller == null)
+        else
         {
-            return;
+            _debugLogWindow.Activate();
+            if (_debugLogWindow.WindowState == WindowState.Minimized)
+            {
+                _debugLogWindow.WindowState = WindowState.Normal;
+            }
         }
-
-        var distanceFromBottom = DebugLogScroller.ScrollableHeight - DebugLogScroller.VerticalOffset;
-        _debugLogAutoScroll = distanceFromBottom <= DebugLogAutoScrollThreshold;
-    }
-
-    private void DebugLogToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        _debugLogExpanded = !_debugLogExpanded;
-        UpdateDebugLogHeader();
-    }
-
-    private void DebugLogClearButton_Click(object sender, RoutedEventArgs e)
-    {
-        _debugLogCollector.Clear();
-    }
-
-    private void UpdateDebugLogHeader()
-    {
-        if (DebugLogToggleButton == null || DebugLogScroller == null)
-        {
-            return;
-        }
-
-        DebugLogToggleButton.Content = _debugLogExpanded ? "v" : ">";
-        DebugLogScroller.Visibility = _debugLogExpanded ? Visibility.Visible : Visibility.Collapsed;
-        if (DebugLogPanel != null)
-        {
-            DebugLogPanel.Height = _debugLogExpanded ? 160 : double.NaN;
-        }
-        if (_debugLogExpanded && _debugLogAutoScroll)
-        {
-            DebugLogScroller.ScrollToEnd();
-        }
-    }
-
-    private void UpdateDebugLogVisibility()
-    {
-        if (DebugLogPanel == null)
-            return;
-        DebugLogPanel.Visibility = ShouldCollectDebugLogs() ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void InitializeHealthIndicators()

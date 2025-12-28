@@ -56,8 +56,14 @@ public class AtcService : IDisposable
         var callsignDetails = CallsignDetails.FromRaw(ofp.Callsign, airlineDirectory);
 
         // Weather (CheckWX if available, else defaults)
-        var originWeather = await FetchWeatherAsync(ofp.OriginIcao, ofp.OriginMetar);
-        var destinationWeather = await FetchWeatherAsync(ofp.DestinationIcao, ofp.DestinationMetar);
+        // Parallelize weather fetching to reduce load time
+        var originWeatherTask = FetchWeatherAsync(ofp.OriginIcao, ofp.OriginMetar);
+        var destinationWeatherTask = FetchWeatherAsync(ofp.DestinationIcao, ofp.DestinationMetar);
+
+        await Task.WhenAll(originWeatherTask, destinationWeatherTask);
+        
+        var originWeather = originWeatherTask.Result;
+        var destinationWeather = destinationWeatherTask.Result;
 
         // Persist and derive ATIS letter from METAR changes (deterministic local cache).
         var originAtis = AtisMetarCache.UpdateMetar(ofp.OriginIcao, originWeather.RawMetar);
@@ -343,6 +349,21 @@ public class AtcService : IDisposable
             IsLowVisibility = false
         };
 
+        // Optimization: Use SimBrief METAR if available to avoid external API latency and improve load times
+        if (!string.IsNullOrWhiteSpace(simbriefMetarFallback))
+        {
+            try
+            {
+                var parsed = ParseMetar(simbriefMetarFallback, defaultWx);
+                AtisMetarCache.UpdateMetar(icao, parsed.RawMetar);
+                return parsed;
+            }
+            catch (Exception ex)
+            {
+                OnDebug?.Invoke($"SimBrief METAR parse failed for {icao}: {ex.Message}. Falling back to live fetch.");
+            }
+        }
+
         try
         {
             var rawMetar = await FetchRawMetarFromAviationWeatherAsync(icao);
@@ -371,15 +392,17 @@ public class AtcService : IDisposable
 
         try
         {
+            // Use a short timeout for METAR fetching to prevent hanging the flight plan load
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var url = $"https://aviationweather.gov/api/data/metar?ids={icao.ToUpperInvariant()}&hours=0&sep=true";
-            using var response = await _httpClient.GetAsync(url);
+            using var response = await _httpClient.GetAsync(url, cts.Token);
             if (!response.IsSuccessStatusCode)
             {
                 OnDebug?.Invoke($"AviationWeather METAR fetch failed for {icao}: {response.StatusCode}");
                 return null;
             }
 
-            var content = await response.Content.ReadAsStringAsync();
+            var content = await response.Content.ReadAsStringAsync(cts.Token);
             if (string.IsNullOrWhiteSpace(content))
                 return null;
 
@@ -538,7 +561,8 @@ public class AtcService : IDisposable
         catch (Exception ex)
         {
             OnDebug?.Invoke($"[ATC ERROR] HandlePilotTransmissionAsync failed: {ex.Message}\n{ex.StackTrace}");
-            response = GetFallbackResponse("say again");
+            // Proactive Error Reporting: Include the error in the response so the user knows why it failed.
+            response = GetFallbackResponse($"say again (System Error: {ex.Message})");
         }
 
         // HARD RULE: Never return null/empty - always provide a response

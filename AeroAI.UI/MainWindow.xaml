@@ -8,125 +8,8 @@
         Icon="{DynamicResource WindowIconImage}">
     
     <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-        <DrawingImage x:Key="WindowIconImage">
-            <DrawingImage.Drawing>
-                <GeometryDrawing Brush="{StaticResource AccentCyanBrush}">
-                    <GeometryDrawing.Geometry>
-                        <!-- Simple paper-plane glyph -->
-                        <Geometry>
-                            M2,8 L12,6 L6,10 L8,14 L10,10 L14,8 L8,4 z
-                        </Geometry>
-                    </GeometryDrawing.Geometry>
-                </GeometryDrawing>
-            </DrawingImage.Drawing>
-        </DrawingImage>
-
-        <!-- Button Style -->
-        <Style x:Key="NavButton" TargetType="Button">
-            <Setter Property="Background" Value="{StaticResource BackgroundLightBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="20,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" 
-                                CornerRadius="4" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#2f4d74"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#1f314b"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="root" Property="Opacity" Value="0.45"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="PrimaryNavButton" TargetType="Button" BasedOn="{StaticResource NavButton}">
-            <Setter Property="Background" Value="{StaticResource AccentGreenBrush}"/>
-            <Setter Property="Foreground" Value="Black"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" 
-                                CornerRadius="6" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#7af0c0"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#4bc08f"/>
-                            </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="root" Property="Opacity" Value="0.55"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="WindowButtonBase" TargetType="Button">
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#24344d"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#1b2637"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="WindowButtonClose" TargetType="Button" BasedOn="{StaticResource WindowButtonBase}">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="root" Background="{TemplateBinding Background}" CornerRadius="4">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#b3261e"/>
-                                <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="root" Property="Background" Value="#8a1c17"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+        <ImageBrush x:Key="WindowIconImage" ImageSource="Assets/AeroAI.ico"/>
     </Window.Resources>
     
     <Grid>
@@ -511,73 +394,6 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                <Border x:Name="DebugLogPanel" Grid.Row="2" Background="#1c2638" CornerRadius="6"
-                        Margin="10,8,10,10" Visibility="Collapsed">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        <DockPanel Grid.Row="0" Margin="10,6,10,4">
-                            <Button x:Name="DebugLogToggleButton"
-                                    Content="v"
-                                    Width="18"
-                                    Height="18"
-                                    Margin="0,0,8,0"
-                                    Style="{StaticResource NavButton}"
-                                    Padding="0"
-                                    Click="DebugLogToggleButton_Click"/>
-                            <TextBlock Text="Debug Log"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                       FontSize="12"
-                                       VerticalAlignment="Center"/>
-                            <Button x:Name="DebugLogClearButton"
-                                    Content="Clear"
-                                    Style="{StaticResource NavButton}"
-                                    Padding="6,2"
-                                    Margin="8,0,0,0"
-                                    HorizontalAlignment="Right"
-                                    DockPanel.Dock="Right"
-                                    Click="DebugLogClearButton_Click"/>
-                        </DockPanel>
-                        <ScrollViewer Grid.Row="1"
-                                      x:Name="DebugLogScroller"
-                                      VerticalScrollBarVisibility="Auto"
-                                      ScrollChanged="DebugLogScroller_ScrollChanged">
-                            <ItemsControl x:Name="DebugLogList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid Margin="10,2,10,2">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="80"/>
-                                                <ColumnDefinition Width="70"/>
-                                                <ColumnDefinition Width="90"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding Timestamp, StringFormat={}{0:HH:mm:ss}}"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       FontSize="11"/>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Level}"
-                                                       Foreground="{StaticResource AccentYellowBrush}"
-                                                       FontSize="11"/>
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Category}"
-                                                       Foreground="{StaticResource AccentCyanBrush}"
-                                                       FontSize="11"/>
-                                            <TextBlock Grid.Column="3"
-                                                       Text="{Binding Message}"
-                                                       Foreground="{StaticResource TextPrimaryBrush}"
-                                                       FontSize="11"
-                                                       TextWrapping="Wrap"/>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Grid>
-                </Border>
             </Grid>
         </Border>
         
@@ -644,6 +460,8 @@
                         Style="{StaticResource NavButton}"
                         Margin="0,0,10,0"
                         Click="TestVoiceButton_Click"/>
+                <Button Content="Show Log" Style="{StaticResource NavButton}" Margin="0,0,10,0"
+                        Click="ShowDebugLog_Click"/>
                 <CheckBox x:Name="DebugToggle" Content="Debug" VerticalAlignment="Center"
                           Foreground="{StaticResource TextPrimaryBrush}"
                           Checked="DebugToggle_Checked" Unchecked="DebugToggle_Unchecked"/>

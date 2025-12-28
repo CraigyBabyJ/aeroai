@@ -507,7 +507,9 @@ public class AeroAiLlmSession : IDisposable
 					LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SayAgain", 
 						$"LLM failed: {ex.GetType().Name}", null, isUsable, null, resolvedContext);
 					var cs = !string.IsNullOrWhiteSpace(_context.RadioCallsign) ? _context.RadioCallsign : (_context.Callsign ?? "Aircraft");
-					return $"{cs}, say again.";
+					
+                    // Proactive Error Reporting: Include the error in the response so the user knows why it failed.
+                    return $"{cs}, say again. (System Error: {ex.Message})";
 				}
 			}
 			else

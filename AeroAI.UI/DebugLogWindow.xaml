@@ -1,0 +1,42 @@
+<Window x:Class="AeroAI.UI.DebugLogWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="AeroAI Debug Log" Height="600" Width="800"
+        Icon="Assets/AeroAI.ico"
+        Background="{StaticResource BackgroundDarkBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Background="{StaticResource BackgroundMediumBrush}" Padding="10">
+            <DockPanel>
+                <CheckBox x:Name="AutoScrollCheck" Content="Auto-scroll" IsChecked="True" 
+                          Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                <Button Content="Clear" Click="ClearButton_Click" Padding="10,5" 
+                        Style="{StaticResource NavButton}"/>
+                <Button Content="Copy All" Click="CopyAllButton_Click" Padding="10,5" Margin="10,0,0,0"
+                        Style="{StaticResource NavButton}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Log Content -->
+        <TextBox x:Name="LogTextBox" Grid.Row="1" 
+                 Background="{StaticResource BackgroundDarkBrush}" 
+                 Foreground="{StaticResource TextPrimaryBrush}"
+                 FontFamily="Consolas, Courier New, Monospace"
+                 FontSize="12"
+                 IsReadOnly="True"
+                 VerticalScrollBarVisibility="Visible"
+                 HorizontalScrollBarVisibility="Auto"
+                 TextWrapping="NoWrap"
+                 BorderThickness="0"
+                 Padding="5"/>
+    </Grid>
+</Window>

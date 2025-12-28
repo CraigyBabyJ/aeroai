@@ -48,7 +48,7 @@
     <None Include="..\Assets\Audio\**\*.wav" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\prompts\*.txt" LinkBase="prompts" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\whisper-fast\service.py" Link="whisper-fast\service.py" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Assets\AeroAI.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="Assets\AeroAI.ico" />
   </ItemGroup>
 
 </Project>

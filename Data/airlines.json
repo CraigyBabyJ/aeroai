@@ -81,15 +81,15 @@
       "call_sign": "VELOCITY"
     },
     "RYR": {
-      "name": "Ryanair DAC",
+      "name": "Ryanair",
       "call_sign": "RYANAIR"
     },
     "EZY": {
-      "name": "easyJet UK",
+      "name": "easyJet",
       "call_sign": "EASY"
     },
     "EJU": {
-      "name": "easyJet Europe",
+      "name": "easyJet",
       "call_sign": "ALPINE"
     },
     "EZS": {
