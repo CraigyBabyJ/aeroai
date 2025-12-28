@@ -38,6 +38,8 @@ public sealed class AtcFlowPack
     public List<AtcPhaseDefinition> Phases { get; init; } = new();
     [JsonPropertyName("role_phase_map")]
     public Dictionary<string, string> RolePhaseMap { get; init; } = new();
+    [JsonPropertyName("missing_info")]
+    public AtcMissingInfoConfig MissingInfo { get; init; } = new();
 }
 
 public sealed class AtcPhaseDefinition
@@ -78,6 +80,32 @@ public sealed class AtcHandoffSpec
     public string Role { get; init; } = string.Empty;
     [JsonPropertyName("frequency_mhz")]
     public double? FrequencyMhz { get; init; }
+}
+
+public sealed class AtcMissingInfoConfig
+{
+    [JsonPropertyName("slot_priorities")]
+    public List<string> SlotPriorities { get; init; } = new();
+    public List<AtcMissingInfoPrompt> Prompts { get; init; } = new();
+    [JsonPropertyName("readback_tails")]
+    public List<AtcReadbackAcknowledgementTail> ReadbackTails { get; init; } = new();
+}
+
+public sealed class AtcMissingInfoPrompt
+{
+    public string Slot { get; init; } = string.Empty;
+    public string? Phase { get; init; }
+    public string? Role { get; init; }
+    public string? Text { get; init; }
+    public List<string> Variants { get; init; } = new();
+}
+
+public sealed class AtcReadbackAcknowledgementTail
+{
+    public string? Phase { get; init; }
+    public string? Role { get; init; }
+    public string? Text { get; init; }
+    public List<string> Variants { get; init; } = new();
 }
 
 public sealed class AtcTemplatePack

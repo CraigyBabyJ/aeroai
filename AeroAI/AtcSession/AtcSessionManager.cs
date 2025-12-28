@@ -409,6 +409,16 @@ public sealed class AtcSessionManager
         var squawk = flightContext.SquawkCode ?? "XXXX";
         data["squawk"] = squawk;
 
+        if (!string.IsNullOrWhiteSpace(flightContext.DepartureAtisLetter))
+        {
+            data["atis_letter"] = flightContext.DepartureAtisLetter!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(flightContext.Aircraft?.IcaoType))
+        {
+            data["aircraft_type"] = flightContext.Aircraft!.IcaoType!;
+        }
+
         data["taxi_route"] = "as directed";
         data["facility"] = !string.IsNullOrWhiteSpace(state.FacilityIcao)
             ? state.FacilityIcao

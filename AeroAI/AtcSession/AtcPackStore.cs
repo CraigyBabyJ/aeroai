@@ -10,6 +10,7 @@ public sealed class AtcPackStore
         Intents = intents;
         Flows = flows;
         Templates = templates;
+        MissingInfo = flows.MissingInfo ?? new AtcMissingInfoConfig();
         IntentById = intents.Intents
             .Where(i => !string.IsNullOrWhiteSpace(i.Id))
             .ToDictionary(i => i.Id, i => i, System.StringComparer.OrdinalIgnoreCase);
@@ -27,6 +28,7 @@ public sealed class AtcPackStore
     public AtcIntentPack Intents { get; }
     public AtcFlowPack Flows { get; }
     public AtcTemplatePack Templates { get; }
+    public AtcMissingInfoConfig MissingInfo { get; }
     public IReadOnlyDictionary<string, AtcIntentDefinition> IntentById { get; }
     public IReadOnlyDictionary<string, AtcPhaseDefinition> PhaseById { get; }
     public IReadOnlyDictionary<string, AtcTemplateDefinition> TemplateById { get; }
