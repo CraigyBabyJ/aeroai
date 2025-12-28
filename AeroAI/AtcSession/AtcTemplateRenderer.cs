@@ -44,6 +44,45 @@ public sealed class AtcTemplateRenderer
         return new AtcTemplateRenderResult(text, template.RequiresReadback, template.ReadbackItems);
     }
 
+    public string? RenderMissingInfoPrompt(string slot, string? phase, string? role, IReadOnlyDictionary<string, string> data)
+    {
+        if (string.IsNullOrWhiteSpace(slot))
+        {
+            return null;
+        }
+
+        var prompt = ResolveMissingInfoPrompt(slot, phase, role);
+        if (prompt == null)
+        {
+            return null;
+        }
+
+        var text = SelectText(prompt.Text, prompt.Variants);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return FillTokens(text, data);
+    }
+
+    public string? RenderReadbackAcknowledgementTail(string? phase, string? role, IReadOnlyDictionary<string, string> data)
+    {
+        var tail = ResolveReadbackTail(phase, role);
+        if (tail == null)
+        {
+            return null;
+        }
+
+        var text = SelectText(tail.Text, tail.Variants);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return FillTokens(text, data);
+    }
+
     private AtcTemplateDefinition? ResolveTemplate(AtcTemplateRequest request)
     {
         if (!string.IsNullOrWhiteSpace(request.TemplateId) &&
@@ -93,6 +132,64 @@ public sealed class AtcTemplateRenderer
 
         text = Regex.Replace(text, @"\s{2,}", " ").Trim();
         return text;
+    }
+
+    private AtcMissingInfoPrompt? ResolveMissingInfoPrompt(string slot, string? phase, string? role)
+    {
+        var prompts = _packs.MissingInfo.Prompts.Where(p =>
+                string.Equals(p.Slot, slot, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (prompts.Count == 0)
+        {
+            return null;
+        }
+
+        var ranked = prompts
+            .OrderByDescending(p => MatchScore(p.Phase, phase) + MatchScore(p.Role, role))
+            .ThenBy(p => string.IsNullOrWhiteSpace(p.Text) && p.Variants.Count == 0);
+
+        return ranked.FirstOrDefault();
+    }
+
+    private AtcReadbackAcknowledgementTail? ResolveReadbackTail(string? phase, string? role)
+    {
+        var tails = _packs.MissingInfo.ReadbackTails;
+        if (tails.Count == 0)
+        {
+            return null;
+        }
+
+        var ranked = tails
+            .OrderByDescending(t => MatchScore(t.Phase, phase) + MatchScore(t.Role, role))
+            .ThenBy(t => string.IsNullOrWhiteSpace(t.Text) && t.Variants.Count == 0);
+
+        return ranked.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t.Text) || t.Variants.Count > 0);
+    }
+
+    private static int MatchScore(string? candidate, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return 0;
+        }
+
+        return string.Equals(candidate, value, StringComparison.OrdinalIgnoreCase) ? 2 : -1;
+    }
+
+    private string? SelectText(string? text, IReadOnlyList<string> variants)
+    {
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            return text;
+        }
+
+        if (variants == null || variants.Count == 0)
+        {
+            return null;
+        }
+
+        return variants[_random.Next(variants.Count)];
     }
 }
 

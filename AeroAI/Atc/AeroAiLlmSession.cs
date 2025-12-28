@@ -8,17 +8,20 @@ using System.Text.RegularExpressions;
 using AeroAI.Config;
 using AeroAI.Models;
 using AeroAI.Data;
+using AeroAI.AtcSession;
 
 namespace AeroAI.Atc;
 
 public class AeroAiLlmSession : IDisposable
 {
-        private readonly IAtcResponseGenerator _responseGenerator;
+	private readonly IAtcResponseGenerator _responseGenerator;
 
 	private readonly FlightContext _context;
 
 	private readonly PilotIntentParser _intentParser;
 	private readonly AtcSession.AtcSessionManager? _sessionManager;
+	private readonly AtcPackStore? _packs;
+	private readonly AtcTemplateRenderer? _templateRenderer;
 
 	private AtcState _state = AtcState.Idle;
 
@@ -66,6 +69,12 @@ public class AeroAiLlmSession : IDisposable
                 _responseGenerator = responseGenerator ?? throw new ArgumentNullException(nameof(responseGenerator));
                 _intentParser = new PilotIntentParser();
                 _sessionManager = AtcSession.AtcSessionManager.TryCreate(_responseGenerator, onDebug);
+		var packLoader = new AtcJsonPackLoader();
+		_packs = packLoader.TryLoadAll(onDebug);
+		if (_packs != null)
+		{
+			_templateRenderer = new AtcTemplateRenderer(_packs);
+		}
                 _onDebug = onDebug;
         }
 
@@ -1640,7 +1649,17 @@ public class AeroAiLlmSession : IDisposable
 
 	private string? BuildReadbackAcknowledgementTail(AtcContext context)
 	{
-		// Phase-aware next steps without re-clearing or re-handing off.
+		var role = ResolveTemplateRole();
+		var phase = ResolveTemplatePhase(role);
+		var data = BuildRendererTemplateData(context);
+
+		var tail = _templateRenderer?.RenderReadbackAcknowledgementTail(phase, role, data);
+		if (!string.IsNullOrWhiteSpace(tail))
+		{
+			return tail;
+		}
+
+		// Fallback to legacy deterministic text if templates are unavailable.
 		return _context.CurrentAtcUnit switch
 		{
 			AtcUnit.ClearanceDelivery => "Call ready for push and start.",
@@ -1703,42 +1722,37 @@ public class AeroAiLlmSession : IDisposable
 	private string? BuildMissingInfoPrompt(AtcContext ctx, string pilotTransmission, bool destinationMismatch = false)
 	{
 		var missing = new List<string>();
-		
+
 		// ATIS confirmation must be checked FIRST (strict training mode requirement).
 		if (TrainingConfig.StrictAtisForClearance && !_atisConfirmed && _context.CurrentPhase == FlightPhase.Preflight_Clearance)
 		{
-			// Check if pilot transmission contains ATIS acknowledgement
 			if (!IsAtisConfirmation(pilotTransmission) && !HasAtisInTransmission(pilotTransmission))
 			{
-				missing.Add("confirm you have the latest information");
+				missing.Add("atis");
 			}
 			else
 			{
-				// If ATIS was mentioned, mark as confirmed
 				_atisConfirmed = true;
+				_clearanceRequestInfo.AtisAcknowledged = true;
 				TryUpdateDepartureAtisLetter(pilotTransmission);
 			}
 		}
-		
-		// Note: destinationMismatch should be handled BEFORE calling this method, but we keep it for safety.
+
+		// Note: destinationMismatch should be handled BEFORE calling this method, but keep it for safety.
 		if (destinationMismatch)
 		{
-			var plannedName = !string.IsNullOrWhiteSpace(_context.DestinationName) ? _context.DestinationName : _context.DestinationIcao;
-			missing.Add($"confirm destination {plannedName}");
+			missing.Add("destination");
 		}
 		else if (string.IsNullOrWhiteSpace(ctx.ClearanceDecision.ClearedTo))
 		{
-			missing.Add("say destination");
+			missing.Add("destination");
 		}
+
 		if (!ctx.ClearanceDecision.InitialAltitudeFt.HasValue)
-			missing.Add("say initial altitude");
-		
-		// Note: Departure runway is assigned by ATC, not requested from pilot, so we don't check for it here.
-		// ATC will assign the runway when issuing the clearance based on weather/airport conditions.
-		
+			missing.Add("initial_altitude");
+
 		// Validate aircraft type using resolver; if invalid/unknown, prompt for ICAO type.
 		var flightType = _context.Aircraft?.IcaoType;
-		// Try to resolve from the pilot transmission first (captures natural speech/model names).
 		var resolvedFromPilot = AircraftTypeResolver.ResolveSimple(pilotTransmission);
 		var mentionedType = MentionsAircraftType(pilotTransmission);
 		if (!string.IsNullOrWhiteSpace(resolvedFromPilot))
@@ -1747,40 +1761,139 @@ public class AeroAiLlmSession : IDisposable
 			flightType = resolvedFromPilot;
 		}
 
-		// If the flight plan already has an aircraft type, do not nag the pilot to repeat it.
-		// Only challenge if the pilot tried to say a type and we couldn't resolve it.
 		if (string.IsNullOrWhiteSpace(flightType))
 		{
-			missing.Add("confirm aircraft type");
+			missing.Add("aircraft_type");
 		}
 		else if (mentionedType && string.IsNullOrWhiteSpace(resolvedFromPilot))
 		{
-			missing.Add("confirm aircraft type");
+			missing.Add("aircraft_type");
 		}
 
 		if (missing.Count == 0)
 			return null;
 
+		var orderedSlots = OrderMissingSlots(missing);
+		var slot = orderedSlots.FirstOrDefault();
+		if (slot == null)
+			return null;
+
+		if (string.Equals(slot, "atis", StringComparison.OrdinalIgnoreCase))
+		{
+			_pendingConfirmation = new PendingConfirmation(ConfirmationSlot.Atis, pilotTransmission, null);
+		}
+
+		var role = ResolveTemplateRole();
+		var phase = ResolveTemplatePhase(role);
+		var data = BuildRendererTemplateData(ctx);
+
+		var rendered = _templateRenderer?.RenderMissingInfoPrompt(slot, phase, role, data);
+		if (!string.IsNullOrWhiteSpace(rendered))
+		{
+			return rendered;
+		}
+
+		// Fallback to deterministic phrasing if templates are unavailable.
+		var callsign = data.TryGetValue("callsign", out var cs) ? cs : (_context.Callsign ?? "Aircraft");
+		return slot.ToLowerInvariant() switch
+		{
+			"atis" => $"{callsign}, confirm you have the latest information.",
+			"destination" => $"{callsign}, say destination.",
+			"aircraft_type" => $"{callsign}, confirm aircraft type.",
+			"initial_altitude" => $"{callsign}, say initial altitude.",
+			_ => $"{callsign}, provide missing information."
+		};
+	}
+
+	private IEnumerable<string> OrderMissingSlots(IEnumerable<string> missing)
+	{
+		if (_packs?.MissingInfo.SlotPriorities == null || _packs.MissingInfo.SlotPriorities.Count == 0)
+		{
+			return missing;
+		}
+
+		var priorities = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+		for (int i = 0; i < _packs.MissingInfo.SlotPriorities.Count; i++)
+		{
+			var slot = _packs.MissingInfo.SlotPriorities[i];
+			if (!priorities.ContainsKey(slot))
+			{
+				priorities[slot] = i;
+			}
+		}
+
+		return missing.OrderBy(s => priorities.ContainsKey(s) ? priorities[s] : int.MaxValue)
+			.ThenBy(s => s, StringComparer.OrdinalIgnoreCase);
+	}
+
+	private Dictionary<string, string> BuildRendererTemplateData(AtcContext ctx)
+	{
+		var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
 		var callsign = !string.IsNullOrWhiteSpace(_context.RadioCallsign)
 			? _context.RadioCallsign
 			: (_context.Callsign ?? "Aircraft");
+		data["callsign"] = callsign;
 
-		// If ATIS is missing, set pending confirmation and return ATIS prompt first (strict training mode).
-		if (TrainingConfig.StrictAtisForClearance && !_atisConfirmed && _context.CurrentPhase == FlightPhase.Preflight_Clearance)
+		var destName = !string.IsNullOrWhiteSpace(_context.DestinationName)
+			? _context.DestinationName
+			: AirportNameResolver.ResolveAirportName(_context.DestinationIcao, _context);
+		data["destination_name"] = destName ?? string.Empty;
+
+		if (!string.IsNullOrWhiteSpace(_context.Aircraft?.IcaoType))
 		{
-			// Check if pilot transmission contains ATIS acknowledgement
-			if (!IsAtisConfirmation(pilotTransmission) && !HasAtisInTransmission(pilotTransmission))
-			{
-				_pendingConfirmation = new PendingConfirmation(ConfirmationSlot.Atis, pilotTransmission, null);
-				return $"{callsign}, confirm you have the latest information.";
-			}
-			// If ATIS was mentioned, mark as confirmed
-			_atisConfirmed = true;
-			TryUpdateDepartureAtisLetter(pilotTransmission);
+			data["aircraft_type"] = _context.Aircraft!.IcaoType!;
 		}
 
-		var needs = string.Join(" and ", missing);
-		return $"{callsign}, {needs}.";
+		if (ctx.ClearanceDecision.InitialAltitudeFt.HasValue)
+		{
+			data["initial_altitude"] = $"{ctx.ClearanceDecision.InitialAltitudeFt.Value}";
+		}
+
+		var atis = AtisMetarCache.Get(_context.OriginIcao).AtisLetter ?? _context.DepartureAtisLetter;
+		if (!string.IsNullOrWhiteSpace(atis))
+		{
+			data["atis_letter"] = ToAtisPhonetic(atis!);
+		}
+
+		data["role"] = ResolveTemplateRole();
+		data["phase"] = ResolveTemplatePhase(data["role"]);
+
+		return data;
+	}
+
+	private string ResolveTemplateRole()
+	{
+		return _context.CurrentAtcUnit switch
+		{
+			AtcUnit.ClearanceDelivery => "delivery",
+			AtcUnit.Ground => "ground",
+			AtcUnit.Tower => "tower",
+			AtcUnit.Departure => "departure",
+			AtcUnit.Center => "center",
+			AtcUnit.Arrival => "approach",
+			AtcUnit.Approach => "approach",
+			_ => "delivery"
+		};
+	}
+
+	private string ResolveTemplatePhase(string? role)
+	{
+		if (!string.IsNullOrWhiteSpace(role) && _packs?.RolePhaseMap != null && _packs.RolePhaseMap.TryGetValue(role, out var phaseFromRole))
+		{
+			return phaseFromRole;
+		}
+
+		return role?.ToLowerInvariant() switch
+		{
+			"delivery" => "clearance",
+			"ground" => "ground",
+			"tower" => "tower",
+			"departure" => "departure",
+			"approach" => "approach",
+			"center" => "center",
+			_ => "clearance"
+		};
 	}
 
 	private static bool MentionsAircraftType(string pilotTransmission)

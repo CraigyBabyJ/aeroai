@@ -7,6 +7,57 @@
     "center": "center",
     "approach": "approach"
   },
+  "missing_info": {
+    "slot_priorities": [
+      "atis",
+      "destination",
+      "aircraft_type",
+      "initial_altitude"
+    ],
+    "prompts": [
+      {
+        "slot": "atis",
+        "phase": "clearance",
+        "role": "delivery",
+        "text": "{callsign}, confirm you have information {atis_letter}."
+      },
+      {
+        "slot": "atis",
+        "text": "{callsign}, confirm you have the latest information."
+      },
+      {
+        "slot": "destination",
+        "phase": "clearance",
+        "role": "delivery",
+        "text": "{callsign}, confirm destination {destination_name}."
+      },
+      {
+        "slot": "destination",
+        "text": "{callsign}, say destination."
+      },
+      {
+        "slot": "aircraft_type",
+        "text": "{callsign}, confirm aircraft type."
+      },
+      {
+        "slot": "initial_altitude",
+        "text": "{callsign}, say initial altitude."
+      }
+    ],
+    "readback_tails": [
+      {
+        "role": "delivery",
+        "text": "Call ready for push and start."
+      },
+      {
+        "role": "ground",
+        "text": "Advise ready for push and start. When ready for taxi, call ground."
+      },
+      {
+        "text": "Proceed as filed."
+      }
+    ]
+  },
   "phases": [
     {
       "id": "clearance",
