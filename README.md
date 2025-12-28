@@ -27,7 +27,32 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 6) Build: `dotnet build AeroAI.sln`.
 
 ## Running
-- Desktop UI: `dotnet run --project AeroAI.UI`. Enter your SimBrief pilot ID in Settings (or via the SimBrief dialog), import the flight plan, then hold the PTT button or type to talk to ATC. Transcripts and ATC replies are logged under `%APPDATA%\\AeroAI\\logs`.
+For a full experience, you should run the three components in separate terminals:
+
+1.  **VoiceLab (TTS)**:
+    ```powershell
+    cd voicelab
+    ./run.ps1
+    ```
+    *Starts the text-to-speech service on http://127.0.0.1:8008*
+
+2.  **Whisper-Fast (STT)**:
+    ```powershell
+    cd whisper-fast
+    ./start.ps1
+    ```
+    *Starts the faster-whisper speech-to-text service on port 8766*
+
+3.  **AeroAI UI (Main App)**:
+    ```powershell
+    dotnet run --project AeroAI.UI/AeroAI.UI.csproj
+    ```
+    *Launches the main desktop application*
+
+### Notes
+- **SimBrief**: Enter your SimBrief pilot ID in Settings (or via the SimBrief dialog) and import the flight plan.
+- **Usage**: Hold the PTT button or type to talk to ATC.
+- **Logs**: Transcripts and ATC replies are logged under `%APPDATA%\\AeroAI\\logs`.
 
 ## STT/LLM safeguards
 - STT: correction rules from `Config/stt_corrections.json` (hot-reload), spoken-number normalizer, aircraft-type resolver, and callsign validator to clean noisy transcripts.

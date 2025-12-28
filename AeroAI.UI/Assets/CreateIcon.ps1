@@ -60,10 +60,10 @@ $pngPath = "$PSScriptRoot\AeroAI.png"
 $largestBitmap.Save($pngPath, [System.Drawing.Imaging.ImageFormat]::Png)
 
 Write-Host "Created AeroAI.png at $pngPath"
-Write-Host "Note: To create a proper .ico file, you can:"
-Write-Host "1. Use an online converter (e.g., convertio.co, ico-convert.com)"
-Write-Host "2. Use ImageMagick: magick convert AeroAI.png -define icon:auto-resize=256,128,64,48,32,16 AeroAI.ico"
-Write-Host "3. Use Visual Studio: Add existing image, then right-click > Convert to Icon"
+
+# Generate the .ico file using the helper script
+Write-Host "Generating AeroAI.ico..."
+& "$PSScriptRoot\CreateIcoFile.ps1" -PngPath "AeroAI.png" -IcoPath "AeroAI.ico"
 
 # Cleanup
 foreach ($img in $images) {

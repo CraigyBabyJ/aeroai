@@ -44,7 +44,9 @@ public static class TtsPlayback
         if (wavData == null || wavData.Length == 0)
             return Task.CompletedTask;
 
-        return Task.Run(() =>
+        // Use Task.Run but ensure the thread is STA which is sometimes required for audio
+        var tcs = new TaskCompletionSource();
+        var thread = new Thread(() =>
         {
             try
             {
@@ -53,12 +55,18 @@ public static class TtsPlayback
                 using var reader = new WaveFileReader(ms);
                 if (!TryPlayWithWasapi(reader, cancellationToken))
                     PlayWithWaveOut(reader, cancellationToken);
+                tcs.SetResult();
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[TTS playback error] {ex.GetType().Name}: {ex.Message}");
+                tcs.SetException(ex);
             }
-        }, cancellationToken);
+        });
+        
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return tcs.Task;
     }
 
     public static Task PlayMp3BytesAsync(byte[] mp3Data, CancellationToken cancellationToken = default)
