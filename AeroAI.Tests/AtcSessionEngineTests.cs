@@ -219,6 +219,28 @@ public class AtcSessionEngineTests
         Assert.False(fallback.WasCalled);
     }
 
+    [Fact]
+    public async Task SessionManager_DefersOnLowConfidenceIntent()
+    {
+        var packs = new AtcJsonPackLoader().TryLoadAll();
+        Assert.NotNull(packs);
+
+        var manager = new AtcSessionManager(packs!, responseGenerator: null);
+        var flight = new FlightContext
+        {
+            Callsign = "TEST 999",
+            OriginIcao = "EGCC",
+            DestinationIcao = "EIDW",
+            CurrentAtcUnit = AtcUnit.ClearanceDelivery,
+            CurrentPhase = FlightPhase.Preflight_Clearance,
+            CruiseFlightLevel = 370
+        };
+
+        var result = await manager.TryHandleAsync("Good afternoon uh maybe at the stand just checking microphone", flight);
+
+        Assert.Null(result);
+    }
+
     private sealed class StubIntentClassifier : IIntentClassifier
     {
         public bool WasCalled { get; private set; }
