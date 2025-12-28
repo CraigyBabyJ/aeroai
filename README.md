@@ -34,6 +34,11 @@ Run the all-in-one script from the root directory to launch VoiceLab, Whisper-Fa
 ./run_all.ps1
 ```
 
+Or if you only want to run the UI (assuming other services are running or not needed):
+```powershell
+./run_ui.ps1
+```
+
 ### Manual Start
 For more control or debugging, you can run the three components in separate terminals:
 
