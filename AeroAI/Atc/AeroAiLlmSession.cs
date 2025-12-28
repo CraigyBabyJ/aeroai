@@ -158,8 +158,9 @@ public class AeroAiLlmSession : IDisposable
 				// Apply output guardrails to session manager response
 				var scrubbed = OutputGuard.ScrubOutput(sessionResult.SpokenText, resolvedContext, _onDebug);
 				_lastAtcResponse = scrubbed;
+				var sessionReason = $"Session manager handled intent={sessionResult.Intent.IntentId} conf={sessionResult.Intent.Confidence:F2}";
 				LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SessionManager", 
-					"Session manager handled", null, isUsable, null, resolvedContext);
+					sessionReason, null, isUsable, null, resolvedContext);
 				return scrubbed;
 			}
 		}

@@ -86,6 +86,11 @@ public sealed class AtcSessionManager
         var intent = await _intentEngine.ClassifyAsync(pilotTransmission, intentContext, ct);
 
         var decision = _flowEngine.Resolve(_state, intent);
+        if (ShouldDeferToFallback(intent, decision))
+        {
+            _onDebug?.Invoke($"[ATC] SessionManager deferring: intent={intent.IntentId} conf={intent.Confidence:F2} action={decision.AtcAction ?? "none"} template={decision.TemplateId ?? "none"}");
+            return null;
+        }
         var isHandoffCheckin = intent.IntentId.Equals("HANDOFF_CHECKIN", StringComparison.OrdinalIgnoreCase);
         var pendingBefore = _state.PendingHandoff;
         string? mentionedRole = null;
@@ -480,6 +485,19 @@ public sealed class AtcSessionManager
         }
 
         return data;
+    }
+
+    private bool ShouldDeferToFallback(AtcIntentResult intent, AtcFlowDecision decision)
+    {
+        var threshold = _packs.Intents.DefaultThreshold ?? 0.6;
+        var lowConfidence = intent.Confidence < threshold;
+        var unknownIntent = intent.IntentId.Equals("unknown", StringComparison.OrdinalIgnoreCase);
+        var fallbackAction = decision.AtcAction != null &&
+                             decision.AtcAction.Equals("SAY_AGAIN", StringComparison.OrdinalIgnoreCase);
+        var missingActionAndTemplate = string.IsNullOrWhiteSpace(decision.AtcAction) &&
+                                       string.IsNullOrWhiteSpace(decision.TemplateId);
+
+        return lowConfidence || unknownIntent || fallbackAction || missingActionAndTemplate;
     }
 
     private string ResolveActiveControllerRole()
