@@ -97,6 +97,40 @@ def _normalize_frequency(text: str) -> str:
     return pattern.sub(repl, text)
 
 
+def _normalize_callsign_numbers(text: str) -> str:
+    """
+    Convert flight numbers in callsigns to digit-by-digit format.
+    Examples:
+    - "Air Canada 223" -> "Air Canada two two three"
+    - "ACA 223" -> "ACA two two three"
+    - "British Airways 456" -> "British Airways four five six"
+    """
+    def repl_airline_name(match: re.Match) -> str:
+        airline = match.group(1).strip()
+        number = match.group(2)
+        number_words = _digits_to_words(number)
+        return f"{airline} {number_words}"
+
+    def repl_icao(match: re.Match) -> str:
+        icao = match.group(1)
+        number = match.group(2)
+        number_words = _digits_to_words(number)
+        return f"{icao} {number_words}"
+
+    # Pattern 1: Airline names (capitalized words) followed by digits
+    # Matches: "Air Canada 223", "British Airways 456"
+    pattern1 = re.compile(r"\b((?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*))\s+(\d{1,4})\b")
+    text = pattern1.sub(repl_airline_name, text)
+
+    # Pattern 2: ICAO codes (2-3 uppercase letters) followed by digits
+    # Matches: "ACA 223", "BAW 456"
+    # This must come after airline name pattern to avoid conflicts
+    pattern2 = re.compile(r"\b([A-Z]{2,3})\s+(\d{1,4})\b")
+    text = pattern2.sub(repl_icao, text)
+
+    return text
+
+
 def _normalize_acronyms(text: str) -> str:
     def repl(match: re.Match) -> str:
         word = match.group(0).upper()
@@ -118,6 +152,7 @@ def _normalize_segment(segment: str) -> str:
     s = _normalize_heading(s)
     s = _normalize_squawk(s)
     s = _normalize_frequency(s)
+    s = _normalize_callsign_numbers(s)  # Convert callsign numbers to digit-by-digit
     s = _normalize_acronyms(s)
     s = " ".join(s.strip().split())
     return s

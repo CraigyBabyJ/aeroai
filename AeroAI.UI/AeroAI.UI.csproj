@@ -10,6 +10,7 @@
     <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
     <UseSourceLink>false</UseSourceLink>
     <Deterministic>false</Deterministic>
+    <ApplicationIcon>Assets\AeroAI.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Disable Git info collection completely -->
@@ -47,6 +48,7 @@
     <None Include="..\Assets\Audio\**\*.wav" LinkBase="Assets\Audio" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\prompts\*.txt" LinkBase="prompts" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\whisper-fast\service.py" Link="whisper-fast\service.py" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Assets\AeroAI.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -24,6 +24,7 @@ Before segmentation and caching, ATC text is normalized while preserving `|` and
 - Flight levels: `FL350` -> `flight level three five zero`.
 - QNH/QFE digits: `QNH 1016` -> `Q N H one zero one six`.
 - Frequencies: `121.800` -> `one two one decimal eight`.
+- Callsign numbers: `Air Canada 223` -> `Air Canada two two three`, `ACA 223` -> `ACA two two three`.
 
 When normalization changes the text, `/tts` responses include `X-Normalized: 1`.
 

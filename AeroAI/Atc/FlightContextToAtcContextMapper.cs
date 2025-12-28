@@ -74,9 +74,12 @@ public static class FlightContextToAtcContextMapper
 			}
 		}
 
-		string callsign = !string.IsNullOrWhiteSpace(flightContext.Callsign)
-			? flightContext.Callsign
-			: flightContext.RawCallsign;
+		// Use RadioCallsign (spoken form) if available, otherwise fall back to Callsign or RawCallsign
+		string callsign = !string.IsNullOrWhiteSpace(flightContext.RadioCallsign)
+			? flightContext.RadioCallsign
+			: (!string.IsNullOrWhiteSpace(flightContext.Callsign)
+				? flightContext.Callsign
+				: flightContext.RawCallsign);
 		if (string.IsNullOrWhiteSpace(callsign))
 		{
 			callsign = "UNKNOWN";
@@ -194,6 +197,10 @@ public static class FlightContextToAtcContextMapper
 
 	private static int GetDefaultInitialAltitude(FlightContext context)
 	{
+		// Use SimBrief initial altitude if available, otherwise calculate default
+		if (context.ClearedAltitude.HasValue && context.ClearedAltitude.Value > 0)
+			return context.ClearedAltitude.Value;
+		
 		return context.CruiseFlightLevel > 300 ? 5000 : 3000;
 	}
 

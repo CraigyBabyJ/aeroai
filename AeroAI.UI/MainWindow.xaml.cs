@@ -537,6 +537,26 @@ public partial class MainWindow : Window
         var parts = new List<string>();
         var airports = new List<string>();
 
+        // Add callsign and airline context - critical for accurate transcription
+        if (!string.IsNullOrWhiteSpace(flight.RadioCallsign))
+        {
+            parts.Add($"Callsign: {flight.RadioCallsign}");
+        }
+        else if (!string.IsNullOrWhiteSpace(flight.Callsign))
+        {
+            parts.Add($"Callsign: {flight.Callsign}");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(flight.AirlineName))
+        {
+            parts.Add($"Airline: {flight.AirlineName}");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(flight.RawCallsign) && flight.RawCallsign != flight.RadioCallsign)
+        {
+            parts.Add($"Callsign ICAO: {flight.RawCallsign}");
+        }
+
         var originName = AirportNameResolver.ResolveAirportName(flight.OriginIcao, flight);
         var originLabel = BuildAirportLabel(flight.OriginIcao, originName);
         if (!string.IsNullOrWhiteSpace(originLabel))

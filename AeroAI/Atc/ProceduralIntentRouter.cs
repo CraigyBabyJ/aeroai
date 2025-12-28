@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text.RegularExpressions;
+using AeroAI.Data;
 
 namespace AeroAI.Atc;
 
@@ -11,20 +12,30 @@ namespace AeroAI.Atc;
 public static class ProceduralIntentRouter
 {
     // Radio check patterns - forgiving matching
+    // Matches: "radio check", "radio checker", "radio checking", "mic check", etc.
     private static readonly Regex RadioCheckPattern = new(
-        @"\b(?:radio\s+check|mic\s+check|radio\s+checking)\b",
+        @"\b(?:radio\s+check(?:er|ing)?|mic\s+check(?:er|ing)?)\b",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Filler words to ignore
     private static readonly string[] FillerWords = { "uh", "um", "please", "request", "uhm", "er" };
 
-    // Radio check response templates
+    // Radio check response templates - Standard ICAO/Global (most common)
+    // These are safe anywhere in the world
     private static readonly string[] RadioCheckResponses = new[]
     {
         "{CALLSIGN}, loud and clear.",
         "{CALLSIGN}, readability five.",
-        "{CALLSIGN}, loud and clear, good day.",
-        "{CALLSIGN}, five by five."
+        "{CALLSIGN}, five by five.",
+        "{CALLSIGN}, loud and clear, readability five."
+    };
+
+    // North American variations (common in Canada/US)
+    private static readonly string[] RadioCheckResponsesNorthAmerica = new[]
+    {
+        "{CALLSIGN}, loud and clear.",
+        "{CALLSIGN}, loud and clear, go ahead.",
+        "{CALLSIGN}, five by five, go ahead."
     };
 
     private static readonly string[] RadioCheckResponsesNoCallsign = new[]
@@ -44,21 +55,22 @@ public static class ProceduralIntentRouter
     /// <param name="transcript">The normalized pilot transmission transcript.</param>
     /// <param name="context">Flight context for callsign extraction/fallback.</param>
     /// <param name="onDebug">Optional debug logging callback.</param>
+    /// <param name="resolvedContext">Optional resolved context for authoritative callsign/airport data.</param>
     /// <returns>ProceduralIntentResult indicating if a match was found and the response.</returns>
-    public static ProceduralIntentResult TryMatch(string transcript, FlightContext context, Action<string>? onDebug = null)
+    public static ProceduralIntentResult TryMatch(string transcript, FlightContext context, Action<string>? onDebug = null, ResolvedContext? resolvedContext = null)
     {
         if (string.IsNullOrWhiteSpace(transcript))
             return ProceduralIntentResult.NoMatch();
 
         // Try to match radio check
-        var radioCheckResult = TryMatchRadioCheck(transcript, context, onDebug);
+        var radioCheckResult = TryMatchRadioCheck(transcript, context, onDebug, resolvedContext);
         if (radioCheckResult.Matched)
             return radioCheckResult;
 
         return ProceduralIntentResult.NoMatch();
     }
 
-    private static ProceduralIntentResult TryMatchRadioCheck(string transcript, FlightContext context, Action<string>? onDebug)
+    private static ProceduralIntentResult TryMatchRadioCheck(string transcript, FlightContext context, Action<string>? onDebug, ResolvedContext? resolvedContext = null)
     {
         // Check if transcript contains radio check pattern
         if (!RadioCheckPattern.IsMatch(transcript))
@@ -67,14 +79,39 @@ public static class ProceduralIntentRouter
         // Normalize transcript: remove filler words for better matching
         var normalized = RemoveFillerWords(transcript);
 
-        // Extract callsign - try from transcript first, then fallback to context
-        var callsign = ExtractCallsignFromRadioCheck(normalized, context);
+        // Extract callsign - ALWAYS prefer resolved context (authoritative SimBrief data)
+        // This is critical because STT may mishear airline names (e.g., "commissar" instead of "Air Canada")
+        string? callsign = null;
+        
+        // Prefer spoken callsign from resolved context (authoritative SimBrief data)
+        // This ensures we use the correct callsign even if STT misheard it
+        if (resolvedContext != null && !string.IsNullOrWhiteSpace(resolvedContext.CallsignSpoken))
+        {
+            callsign = resolvedContext.CallsignSpoken;
+        }
+        else
+        {
+            // If resolved context not available, use RadioCallsign from context (spoken form)
+            // This is more reliable than trying to extract from misheard transcript
+            if (!string.IsNullOrWhiteSpace(context.RadioCallsign))
+            {
+                callsign = context.RadioCallsign;
+            }
+            else
+            {
+                // Last resort: try to extract from transcript (may be misheard)
+                callsign = ExtractCallsignFromRadioCheck(normalized, context);
+            }
+        }
 
-        // Generate response
-        var response = GenerateRadioCheckResponse(callsign);
+        // Determine if we're in North America (Canada/US) for regional phraseology
+        var isNorthAmerica = IsNorthAmericanAirport(context);
+
+        // Generate response with regional variations
+        var response = GenerateRadioCheckResponse(callsign, isNorthAmerica);
 
         // Log the match
-        var logMessage = $"[IntentRouter] Matched procedural intent: RadioCheck, callsign={callsign ?? "null"}, transcript=\"{transcript}\"";
+        var logMessage = $"[IntentRouter] Matched procedural intent: RadioCheck, callsign={callsign ?? "null"}, region={(isNorthAmerica ? "NorthAmerica" : "Global")}, transcript=\"{transcript}\"";
         onDebug?.Invoke(logMessage);
 
         return ProceduralIntentResult.Match(
@@ -136,20 +173,58 @@ public static class ProceduralIntentRouter
         return null;
     }
 
-    private static string GenerateRadioCheckResponse(string? callsign)
+    private static string GenerateRadioCheckResponse(string? callsign, bool isNorthAmerica = false)
     {
         string[] templates;
         if (!string.IsNullOrWhiteSpace(callsign))
         {
-            templates = RadioCheckResponses;
+            // Use North American templates if in North America, otherwise use global/ICAO templates
+            templates = isNorthAmerica ? RadioCheckResponsesNorthAmerica : RadioCheckResponses;
         }
         else
         {
             templates = RadioCheckResponsesNoCallsign;
         }
 
+        // Randomly select a template from the appropriate pool
         var template = templates[_random.Next(templates.Length)];
         return template.Replace("{CALLSIGN}", callsign ?? string.Empty).Trim();
+    }
+
+    /// <summary>
+    /// Determines if the airport is in North America (Canada or United States).
+    /// Checks ICAO prefix (C for Canada, K for US) or ISO country code.
+    /// </summary>
+    private static bool IsNorthAmericanAirport(FlightContext context)
+    {
+        if (context == null)
+            return false;
+
+        // Check origin airport first (most relevant for clearance delivery)
+        var icao = context.OriginIcao;
+        if (string.IsNullOrWhiteSpace(icao))
+            return false;
+
+        var upperIcao = icao.Trim().ToUpperInvariant();
+
+        // Check ICAO prefix: C = Canada, K = United States
+        if (upperIcao.StartsWith("C", StringComparison.Ordinal) || 
+            upperIcao.StartsWith("K", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // Fallback: Check ISO country code via AirportDataService
+        if (AirportDataService.TryGetAirportInfo(icao, out var info))
+        {
+            var isoCountry = info.IsoCountry?.Trim().ToUpperInvariant();
+            if (isoCountry == "CA" || isoCountry == "US")
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

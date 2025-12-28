@@ -128,7 +128,8 @@ public class AtcService : IDisposable
             },
             CurrentPhase = FlightPhase.Preflight_Clearance,
             CurrentAtcUnit = AtcUnit.ClearanceDelivery,
-            CruiseFlightLevel = ofp.CruiseFlightLevel
+            CruiseFlightLevel = ofp.CruiseFlightLevel,
+            ClearedAltitude = ofp.InitialAltitude > 0 ? ofp.InitialAltitude : null
         };
 
         if (_flightContext.DepartureRunway == null && selectedDepartureRunway != null)
@@ -685,13 +686,42 @@ public class AtcService : IDisposable
 
     private static string NormalizeForSpeech(string text)
     {
-        // Expand FL240 -> "flight level two four zero" for better TTS pronunciation.
-        return Regex.Replace(text, @"\bFL(\d{2,3})\b", match =>
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        var result = text;
+
+        // 1. Convert flight numbers in callsigns to digit-by-digit format
+        // Pattern: airline name (words starting with capital) followed by space and digits
+        // Examples: "Air Canada 223" -> "Air Canada two two three"
+        //           "British Airways 456" -> "British Airways four five six"
+        result = Regex.Replace(result, @"\b((?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*))\s+(\d{1,4})\b", match =>
+        {
+            var airlinePart = match.Groups[1].Value.Trim();
+            var numberPart = match.Groups[2].Value;
+            var numberWords = string.Join(" ", numberPart.Select(DigitToWord));
+            return $"{airlinePart} {numberWords}";
+        });
+
+        // 2. Handle ICAO code format (e.g., "ACA 223" -> "ACA two two three")
+        // This must come after the airline name pattern to avoid conflicts
+        result = Regex.Replace(result, @"\b([A-Z]{2,3})\s+(\d{1,4})\b", match =>
+        {
+            var icaoPart = match.Groups[1].Value;
+            var numberPart = match.Groups[2].Value;
+            var numberWords = string.Join(" ", numberPart.Select(DigitToWord));
+            return $"{icaoPart} {numberWords}";
+        });
+
+        // 3. Expand FL240 -> "flight level two four zero" for better TTS pronunciation.
+        result = Regex.Replace(result, @"\bFL(\d{2,3})\b", match =>
         {
             var digits = match.Groups[1].Value;
             var spoken = string.Join(" ", digits.Select(DigitToWord));
             return $"flight level {spoken}";
         }, RegexOptions.IgnoreCase);
+
+        return result;
     }
 
     private static string DigitToWord(char c) => c switch

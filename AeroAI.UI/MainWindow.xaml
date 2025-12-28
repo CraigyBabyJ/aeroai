@@ -393,43 +393,47 @@
                     </Grid>
                 </StackPanel>
                 
-                <!-- Center: Flight Info -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="Flight ID" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="FlightIdDisplay" Text="---" Foreground="{StaticResource AccentCyanBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="Dest" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="DestIcao" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="ATIS" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="AtisLetterDisplay" Text="---" Foreground="{StaticResource AccentYellowBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="METAR" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="MetarDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"
-                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" MaxWidth="360"
-                                   ToolTip="{Binding ElementName=MetarDisplay, Path=Text}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="RWY (adv)" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="AdvisoryRunwayDisplay" Text="---" Foreground="{StaticResource TextSecondaryBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="Runway" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="DepRunwayDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                        <TextBlock Text="Init Alt" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="InitAltDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}"/>
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Squawk" Foreground="{StaticResource TextSecondaryBrush}" Width="80"/>
-                        <TextBlock x:Name="SquawkDisplay" Text="----" Foreground="{StaticResource AccentYellowBrush}"/>
-                    </StackPanel>
-                </StackPanel>
+                <!-- Center: Flight Info - Compact Grid Layout -->
+                <Grid Grid.Column="1" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Row 0: Flight ID | Dest -->
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Flight ID" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,6,0"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="FlightIdDisplay" Text="---" Foreground="{StaticResource AccentCyanBrush}" FontSize="11" Margin="0,0,12,0"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Dest" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,6,0"/>
+                    <TextBlock Grid.Row="0" Grid.Column="3" x:Name="DestIcao" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11"/>
+                    
+                    <!-- Row 1: ATIS | RWY (adv) -->
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="ATIS" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="AtisLetterDisplay" Text="---" Foreground="{StaticResource AccentYellowBrush}" FontSize="11" Margin="0,4,12,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="RWY" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="3" x:Name="AdvisoryRunwayDisplay" Text="---" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,0,0"/>
+                    
+                    <!-- Row 2: Runway | Init Alt -->
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Runway" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="DepRunwayDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,4,12,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="Init Alt" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="3" x:Name="InitAltDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontSize="11" Margin="0,4,0,0"/>
+                    
+                    <!-- Row 3: Squawk | METAR (full width) -->
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Squawk" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SquawkDisplay" Text="----" Foreground="{StaticResource AccentYellowBrush}" FontSize="11" Margin="0,4,12,0"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="METAR" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,4,6,0"/>
+                    <TextBlock Grid.Row="3" Grid.Column="3" x:Name="MetarDisplay" Text="---" Foreground="{StaticResource TextPrimaryBrush}" FontSize="10"
+                               TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"
+                               ToolTip="{Binding ElementName=MetarDisplay, Path=Text}"/>
+                </Grid>
                 
                 <!-- Right: Callsign -->
                 <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">

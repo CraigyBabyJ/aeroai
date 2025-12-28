@@ -40,6 +40,11 @@ public sealed class FlightPlan
     public int CruiseFlightLevel { get; init; }
     
     /// <summary>
+    /// Initial altitude in feet from SimBrief (may be 0 if not provided).
+    /// </summary>
+    public int InitialAltitude { get; init; }
+    
+    /// <summary>
     /// Ordered list of waypoints from the navlog (enroute waypoints only, excluding SID/STAR).
     /// Used by AeroAI to match SID exit fixes and STAR entry fixes.
     /// </summary>

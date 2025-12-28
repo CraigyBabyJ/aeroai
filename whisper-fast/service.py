@@ -143,10 +143,10 @@ class Handler(BaseHTTPRequestHandler):
                 transcribe_start = time.time()
                 options = dict(
                     language="en",
-                    beam_size=1,
-                    best_of=1,
+                    beam_size=5,  # Increased from 1 for better accuracy
+                    best_of=5,    # Increased from 1 for better sampling
                     vad_filter=True,
-                    condition_on_previous_text=False,
+                    condition_on_previous_text=True,  # Enable context from previous text
                 )
                 if isinstance(initial_prompt, str) and initial_prompt.strip():
                     options["initial_prompt"] = initial_prompt.strip()
@@ -178,10 +178,10 @@ class Handler(BaseHTTPRequestHandler):
                         fallback_start = time.time()
                         options = dict(
                             language="en",
-                            beam_size=1,
-                            best_of=1,
+                            beam_size=5,  # Increased from 1 for better accuracy
+                            best_of=5,    # Increased from 1 for better sampling
                             vad_filter=True,
-                            condition_on_previous_text=False,
+                            condition_on_previous_text=True,  # Enable context from previous text
                         )
                         if isinstance(initial_prompt, str) and initial_prompt.strip():
                             options["initial_prompt"] = initial_prompt.strip()

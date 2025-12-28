@@ -33,12 +33,14 @@ public static class ClearanceHelpers
 
 	public static bool ClearanceDataComplete(AtcContext ctx)
 	{
+		// Check if we have enough information to issue a clearance.
+		// Note: DepRunway is assigned by ATC in the clearance, not required from pilot beforehand.
 		return ctx != null
 			&& ctx.ClearanceDecision != null
 			&& !string.IsNullOrWhiteSpace(ctx.ClearanceDecision.ClearedTo)
-			&& !string.IsNullOrWhiteSpace(ctx.ClearanceDecision.DepRunway)
 			&& ctx.ClearanceDecision.InitialAltitudeFt.HasValue
 			&& !string.IsNullOrWhiteSpace(ctx.ClearanceDecision.Squawk);
+		// DepRunway will be assigned by ATC when issuing the clearance based on weather/airport conditions.
 	}
 
 	private static void DebugLogClearanceCheck(string message)

@@ -118,6 +118,7 @@ public sealed class SimBriefClient : IDisposable
         string route = string.Empty;
         string aircraftIcao = string.Empty;
         int cruiseFl = 0;
+        int initialAltitude = 0;
 
         // Try v2 format first (nested structure)
         if (root.TryGetProperty("origin", out var originElem))
@@ -287,6 +288,7 @@ public sealed class SimBriefClient : IDisposable
                 
                 if (altStr != null && int.TryParse(altStr, out var feet) && feet > 0)
                 {
+                    initialAltitude = feet;
                     cruiseFl = feet / 100;
                 }
             }
@@ -456,6 +458,7 @@ public sealed class SimBriefClient : IDisposable
             PlannedSid = plannedSid.ToUpperInvariant(),
             Route = route,
             CruiseFlightLevel = cruiseFl,
+            InitialAltitude = initialAltitude,
             AircraftIcao = aircraftIcao.ToUpperInvariant(),
             WaypointIdentifiers = waypoints,
             OriginName = originName,
@@ -549,9 +552,11 @@ public sealed class SimBriefClient : IDisposable
         }
         
         int cruiseFl = 0;
+        int initialAltitude = 0;
         var initialAlt = general?.Element("initial_altitude")?.Value;
         if (int.TryParse(initialAlt, out var feet) && feet > 0)
         {
+            initialAltitude = feet;
             cruiseFl = feet / 100;
         }
 

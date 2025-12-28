@@ -52,15 +52,22 @@ public sealed class CallsignDetails
 		var match = AirlineCallsignPattern.Match(raw);
 		if (!match.Success)
 		{
+			System.Diagnostics.Debug.WriteLine($"[CALLSIGN] Pattern match failed for '{raw}'");
 			return new CallsignDetails(raw, null, null, null, raw, null);
 		}
 
 		var airlineIcao = match.Groups["icao"].Value;
 		var flightNumber = match.Groups["flight"].Value;
+		System.Diagnostics.Debug.WriteLine($"[CALLSIGN] Parsed '{raw}' -> ICAO={airlineIcao}, Flight={flightNumber}");
+		
 		var (radioName, fullName) = ResolveAirlineNames(airlineDirectory, airlineIcao);
+		// Radio callsigns: use the airline name (e.g., "Air Canada") not the ICAO code (e.g., "ACA")
+		// If we have a resolved airline name, use it; otherwise fall back to ICAO code
 		var radioCallsign = string.IsNullOrWhiteSpace(radioName)
 			? $"{airlineIcao} {flightNumber}"
 			: $"{radioName} {flightNumber}";
+
+		System.Diagnostics.Debug.WriteLine($"[CALLSIGN] Final: RadioCallsign='{radioCallsign}', AirlineName='{radioName}', AirlineFullName='{fullName}'");
 
 		return new CallsignDetails(raw, airlineIcao, flightNumber, radioName, radioCallsign, fullName, raw);
 	}
@@ -87,13 +94,25 @@ public sealed class CallsignDetails
 
 	private static (string? radioName, string? fullName) ResolveAirlineNames(AirlineDirectory directory, string airlineIcao)
 	{
-		if (directory.TryGetAirline(airlineIcao, out var airline))
+		if (!directory.HasData)
 		{
-			var radio = airline.GetPreferredDisplay();
-			var full = airline.Name;
-			return (NormalizeAirlineName(radio), NormalizeAirlineName(full));
+			System.Diagnostics.Debug.WriteLine($"[CALLSIGN] AirlineDirectory has no data (source: {directory.SourcePath})");
+			return (null, null);
 		}
 
+		if (directory.TryGetAirline(airlineIcao, out var airline))
+		{
+			// Use the airline name (e.g., "Air Canada") for radio callsign, not the call_sign (e.g., "AIR CANADA")
+			// The call_sign is the radio phraseology, but we want the readable name for display
+			var radio = airline.Name; // Use name field, not call_sign
+			var full = airline.Name;
+			var normalizedRadio = NormalizeAirlineName(radio);
+			var normalizedFull = NormalizeAirlineName(full);
+			System.Diagnostics.Debug.WriteLine($"[CALLSIGN] Resolved {airlineIcao}: name='{airline.Name}', call_sign='{airline.CallSign}', using name='{normalizedRadio}'");
+			return (normalizedRadio, normalizedFull);
+		}
+
+		System.Diagnostics.Debug.WriteLine($"[CALLSIGN] Airline {airlineIcao} not found in directory (has {directory.SourcePath})");
 		return (null, null);
 	}
 

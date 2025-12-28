@@ -66,6 +66,16 @@ public sealed class AirlineDirectory
 				}
 			}
 
+			Console.WriteLine($"[CALLSIGN] Loaded {airlines.Count} airlines from {resolvedPath}");
+			if (airlines.TryGetValue("ACA", out var aca))
+			{
+				Console.WriteLine($"[CALLSIGN] ACA found: Name='{aca.Name}', CallSign='{aca.CallSign}', PreferredDisplay='{aca.GetPreferredDisplay()}'");
+			}
+			else
+			{
+				Console.WriteLine($"[CALLSIGN] WARNING: ACA not found in airlines.json");
+			}
+
 			return new AirlineDirectory(new Dictionary<string, AirlineInfo>(airlines, StringComparer.OrdinalIgnoreCase), resolvedPath);
 		}
 		catch (Exception ex)

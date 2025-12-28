@@ -59,6 +59,79 @@ public static class AirportNameResolver
 		return NamesByIcao.Value.ContainsKey(token.Trim().ToUpperInvariant());
 	}
 
+	/// <summary>
+	/// Attempts to resolve an airport name (e.g., "Calgary") to an ICAO code (e.g., "CYYC").
+	/// Uses fuzzy matching on airport names and municipalities in the airports dataset.
+	/// Returns null if no match is found.
+	/// </summary>
+	public static string? ResolveIcaoFromName(string? airportName, FlightContext? flightContext = null)
+	{
+		if (string.IsNullOrWhiteSpace(airportName))
+			return null;
+
+		var normalizedName = airportName.Trim();
+		
+		// If it's already an ICAO code, return it
+		if (normalizedName.Length == 4 && IsKnownAirportIcao(normalizedName))
+			return normalizedName.ToUpperInvariant();
+
+		// Try to find in airports.json by matching name or municipality
+		string? path = ResolveDataPath();
+		if (path == null || !File.Exists(path))
+			return null;
+
+		try
+		{
+			using var doc = JsonDocument.Parse(File.ReadAllText(path));
+			foreach (var airport in doc.RootElement.EnumerateObject())
+			{
+				var icao = airport.Name?.Trim();
+				if (string.IsNullOrWhiteSpace(icao))
+					continue;
+
+				// Check municipality
+				if (airport.Value.TryGetProperty("municipality", out var muniProp))
+				{
+					var muni = muniProp.GetString();
+					if (!string.IsNullOrWhiteSpace(muni) && 
+					    muni.Trim().Equals(normalizedName, StringComparison.OrdinalIgnoreCase))
+					{
+						return icao.ToUpperInvariant();
+					}
+				}
+
+				// Check full airport name
+				if (airport.Value.TryGetProperty("name", out var nameProp))
+				{
+					var name = nameProp.GetString();
+					if (!string.IsNullOrWhiteSpace(name))
+					{
+						// Exact match
+						if (name.Trim().Equals(normalizedName, StringComparison.OrdinalIgnoreCase))
+							return icao.ToUpperInvariant();
+						
+						// Contains match (e.g., "Calgary International" contains "Calgary")
+						if (name.Contains(normalizedName, StringComparison.OrdinalIgnoreCase) ||
+						    normalizedName.Contains(name.Trim(), StringComparison.OrdinalIgnoreCase))
+						{
+							return icao.ToUpperInvariant();
+						}
+					}
+				}
+			}
+		}
+		catch (JsonException)
+		{
+			// Ignore
+		}
+		catch (IOException)
+		{
+			// Ignore
+		}
+
+		return null;
+	}
+
 	private static Dictionary<string, string> LoadAirportNames()
 	{
 		var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

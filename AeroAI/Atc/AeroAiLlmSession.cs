@@ -58,6 +58,7 @@ public class AeroAiLlmSession : IDisposable
 	}
 
         private readonly Action<string>? _onDebug;
+        private static readonly RoutingMetrics _routingMetrics = new RoutingMetrics();
 
         public AeroAiLlmSession(IAtcResponseGenerator responseGenerator, FlightContext context, Action<string>? onDebug = null)
         {
@@ -68,14 +69,36 @@ public class AeroAiLlmSession : IDisposable
                 _onDebug = onDebug;
         }
 
+        /// <summary>
+        /// Gets the current routing metrics snapshot.
+        /// </summary>
+        public static RoutingMetricsSnapshot GetRoutingMetrics() => _routingMetrics.GetSnapshot();
+
 	public async Task<string?> HandlePilotTransmissionAsync(string pilotTransmission, CancellationToken cancellationToken = default(CancellationToken))
 	{
+		var rawTranscript = pilotTransmission;
+		double? sttConfidence = null; // TODO: Extract from STT service if available
+
+		// Update metrics
+		_routingMetrics.IncrementTotalTranscripts();
+
+		// Early exits for non-operational acks
 		if (ClearanceHelpers.IsNonOperationalAck(pilotTransmission))
 		{
 			return null;
 		}
+
+		// Check usability BEFORE normalization (for logging purposes)
+		var isUsableBeforeNorm = TranscriptUsabilityChecker.IsUsable(pilotTransmission, sttConfidence);
+		var unusableReasonBeforeNorm = TranscriptUsabilityChecker.GetUnusableReason(pilotTransmission, sttConfidence);
+
 		if (string.IsNullOrWhiteSpace(pilotTransmission))
 		{
+			_routingMetrics.IncrementUnusableTranscripts();
+			_routingMetrics.IncrementSayAgain();
+			var emptyResolvedContext = ResolvedContextBuilder.Build(_context);
+			LogRoutingDecision(rawTranscript, pilotTransmission, sttConfidence, null, "SayAgain", 
+				"Empty or whitespace only", null, false, "Empty or whitespace only", emptyResolvedContext);
 			return "Say again?";
 		}
 
@@ -88,30 +111,47 @@ public class AeroAiLlmSession : IDisposable
 
 		// Apply centralized normalization pipeline (STT corrections, deterministic fixes, callsign/readback normalization)
 		// This must happen BEFORE any routing logic to ensure consistent processing
-		pilotTransmission = PilotTransmissionNormalizer.Normalize(pilotTransmission, _context, enableDebugLogging: true);
+		var normalizedTranscript = PilotTransmissionNormalizer.Normalize(pilotTransmission, _context, enableDebugLogging: true);
 
 		// Re-check ATIS after normalization (in case normalization improved the text)
-		ExtractAndPersistAtisAcknowledgement(pilotTransmission);
+		ExtractAndPersistAtisAcknowledgement(normalizedTranscript);
 
 		// Re-check stand/gate after normalization
-                ExtractAndPersistStandGate(pilotTransmission);
+                ExtractAndPersistStandGate(normalizedTranscript);
+
+		// Check usability AFTER normalization
+		var isUsable = TranscriptUsabilityChecker.IsUsable(normalizedTranscript, sttConfidence);
+		var unusableReason = TranscriptUsabilityChecker.GetUnusableReason(normalizedTranscript, sttConfidence);
+
+		// Build resolved context from FlightContext (authoritative SimBrief data)
+		var resolvedContext = ResolvedContextBuilder.Build(_context);
 
 		// PROCEDURAL INTENT ROUTING: Check for procedural intents (e.g., radio checks) BEFORE any LLM routing
 		// These must bypass the LLM entirely and use hard-coded responses
-		var proceduralResult = ProceduralIntentRouter.TryMatch(pilotTransmission, _context, _onDebug);
+		var proceduralResult = ProceduralIntentRouter.TryMatch(normalizedTranscript, _context, _onDebug, resolvedContext);
 		if (proceduralResult.Matched && !string.IsNullOrWhiteSpace(proceduralResult.ResponseText))
 		{
-			_lastAtcResponse = proceduralResult.ResponseText;
-			return proceduralResult.ResponseText;
+			_routingMetrics.IncrementProceduralHits();
+			// Apply output guardrails to procedural responses as well (in case callsign needs scrubbing)
+			var scrubbedResponse = OutputGuard.ScrubOutput(proceduralResult.ResponseText, resolvedContext, _onDebug);
+			_lastAtcResponse = scrubbedResponse;
+			LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, proceduralResult.Intent, 
+				"Procedural", "Matched procedural intent", proceduralResult.ExtractedCallsign, isUsable, null, resolvedContext);
+			return scrubbedResponse;
 		}
 
 		if (_sessionManager != null)
 		{
-			var sessionResult = await _sessionManager.TryHandleAsync(pilotTransmission, _context, cancellationToken);
+			var sessionResult = await _sessionManager.TryHandleAsync(normalizedTranscript, _context, cancellationToken);
 			if (sessionResult != null && !string.IsNullOrWhiteSpace(sessionResult.SpokenText))
 			{
-				_lastAtcResponse = sessionResult.SpokenText;
-				return sessionResult.SpokenText;
+				_routingMetrics.IncrementLlmCalls(); // Session manager may use LLM internally
+				// Apply output guardrails to session manager response
+				var scrubbed = OutputGuard.ScrubOutput(sessionResult.SpokenText, resolvedContext, _onDebug);
+				_lastAtcResponse = scrubbed;
+				LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SessionManager", 
+					"Session manager handled", null, isUsable, null, resolvedContext);
+				return scrubbed;
 			}
 		}
 
@@ -120,9 +160,17 @@ public class AeroAiLlmSession : IDisposable
 		if (_pendingReadback != null)
 		{
 			// Readback handling is done in RouteToPhaseHandlerAsync, but we skip callsign checks here
-			var readbackIntent = _intentParser.ParseIntent(pilotTransmission, _context);
+			var readbackIntent = _intentParser.ParseIntent(normalizedTranscript, _context);
 			var readbackContext = _lastContext ?? FlightContextToAtcContextMapper.Map(_context, _ifrClearanceIssued, readbackIntent);
-			return await RouteToPhaseHandlerAsync(readbackContext, pilotTransmission, readbackIntent, cancellationToken);
+			var readbackResolvedContext = ResolvedContextBuilder.Build(_context);
+			var readbackResult = await RouteToPhaseHandlerAsync(readbackContext, normalizedTranscript, readbackIntent, cancellationToken, readbackResolvedContext);
+			if (!string.IsNullOrWhiteSpace(readbackResult))
+			{
+				// Apply output guardrails
+				var scrubbed = OutputGuard.ScrubOutput(readbackResult, readbackResolvedContext, _onDebug);
+				return scrubbed;
+			}
+			// If readback handling returned null/empty, fall through to LLM fallback below
 		}
 
 		// 2. Pending destination confirmation -> handle destination confirmation ONLY (no callsign gate, no radio check override)
@@ -247,12 +295,8 @@ public class AeroAiLlmSession : IDisposable
 			return $"{cs}, confirm you have the latest information.";
 		}
 
-		// 4. Radio check handling (only if no pending states)
-		var lowerTransmission = pilotTransmission.ToLowerInvariant();
-		if (IsRadioCheckRequest(lowerTransmission))
-		{
-			return BuildRadioCheckReply();
-		}
+		// 4. Radio check handling (only if no pending states) - REMOVED: handled by ProceduralIntentRouter above
+		// This section is now redundant since ProceduralIntentRouter handles radio checks
 
 		// 5. Callsign gating (ONLY if callsign is NOT already known - session-sticky)
 		// Once callsign is set, NEVER ask again in this session
@@ -268,18 +312,35 @@ public class AeroAiLlmSession : IDisposable
 		else
 		{
 			// Callsign is unknown - check if pilot provided it in this transmission
-			var callsignFromTransmission = CallsignMatcher.ExtractCallsign(pilotTransmission, _context);
+			var callsignFromTransmission = CallsignMatcher.ExtractCallsign(normalizedTranscript, _context);
 			if (string.IsNullOrWhiteSpace(callsignFromTransmission))
 			{
-				LogDebug("[CALLSIGN] Unknown and not provided in transmission - prompting");
-				return "Who is calling? Please include your callsign.";
+				LogDebug("[CALLSIGN] Unknown and not provided in transmission");
+				// Check if transcript is usable before deciding what to do
+				if (!isUsable)
+				{
+					// Unusable transcript - return say again (will not route to LLM)
+					_routingMetrics.IncrementUnusableTranscripts();
+					_routingMetrics.IncrementSayAgain();
+					LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SayAgain", 
+						$"Unusable transcript: {unusableReason}", null, false, unusableReason, resolvedContext);
+					var cs = "Aircraft";
+					return $"{cs}, say again.";
+				}
+				// Usable transcript but no callsign extracted - allow it to fall through to LLM
+				// The LLM can handle requests like "radio check" even without explicit callsign
+				// We'll use the resolved context callsign (from SimBrief) if available
+				LogDebug("[CALLSIGN] Usable transcript without extracted callsign - allowing LLM fallback (will use SimBrief callsign if available)");
 			}
-			// Callsign found - update context (will be persisted by intent parser or elsewhere)
-			_clearanceRequestInfo.CallsignKnown = true;
-			LogDebug($"[CALLSIGN] Extracted from transmission: '{callsignFromTransmission}'");
+			else
+			{
+				// Callsign found - update context (will be persisted by intent parser or elsewhere)
+				_clearanceRequestInfo.CallsignKnown = true;
+				LogDebug($"[CALLSIGN] Extracted from transmission: '{callsignFromTransmission}'");
+			}
 		}
 
-		PilotIntent pilotIntent = _intentParser.ParseIntent(pilotTransmission, _context);
+		PilotIntent pilotIntent = _intentParser.ParseIntent(normalizedTranscript, _context);
 
 		// Top-down routing for clearance delivery: Delivery -> Ground -> Tower -> Approach -> Center -> UNICOM.
 		if (pilotIntent.Type == IntentType.RequestClearance)
@@ -292,7 +353,38 @@ public class AeroAiLlmSession : IDisposable
 		}
 
 		// Cross-check pilot-stated destination against flight plan (accept either ICAO or spoken airport name).
-		var destinationMention = ExtractDestinationMention(pilotTransmission, pilotIntent);
+		var destinationMention = ExtractDestinationMention(normalizedTranscript, pilotIntent);
+		
+		// If destination was mentioned and FlightContext doesn't have one, try to resolve and set it
+		// (This handles cases where flight plan might not be loaded yet)
+		if (destinationMention.HasDestination && string.IsNullOrWhiteSpace(_context.DestinationIcao))
+		{
+			string? resolvedIcao = null;
+			string? resolvedName = null;
+			
+			// If we have an ICAO code, use it
+			if (!string.IsNullOrWhiteSpace(destinationMention.Icao))
+			{
+				resolvedIcao = destinationMention.Icao.ToUpperInvariant();
+				resolvedName = AirportNameResolver.ResolveAirportName(resolvedIcao, _context);
+			}
+			// If we have a name, try to resolve it to ICAO
+			else if (!string.IsNullOrWhiteSpace(destinationMention.Name))
+			{
+				resolvedIcao = AirportNameResolver.ResolveIcaoFromName(destinationMention.Name, _context);
+				resolvedName = destinationMention.Name;
+			}
+			
+			// If we successfully resolved a destination, set it
+			if (!string.IsNullOrWhiteSpace(resolvedIcao))
+			{
+				_context.DestinationIcao = resolvedIcao;
+				if (!string.IsNullOrWhiteSpace(resolvedName))
+					_context.DestinationName = resolvedName;
+				LogDebug($"[Destination] Resolved '{destinationMention.Name ?? destinationMention.Icao}' to ICAO '{resolvedIcao}', name '{resolvedName}'");
+			}
+		}
+		
 		if (destinationMention.HasDestination && !DestinationMatchesFlightPlan(destinationMention))
 		{
 			var cs = !string.IsNullOrWhiteSpace(_context.RadioCallsign) ? _context.RadioCallsign : (_context.Callsign ?? "Aircraft");
@@ -323,15 +415,15 @@ public class AeroAiLlmSession : IDisposable
 			}
 		}
 
-		UpdateStateFromPilotTransmission(pilotTransmission);
-		bool maskDestination = ShouldMaskDestination(pilotTransmission);
+		UpdateStateFromPilotTransmission(normalizedTranscript);
+		bool maskDestination = ShouldMaskDestination(normalizedTranscript);
 		AtcContext atcContext = FlightContextToAtcContextMapper.Map(_context, _ifrClearanceIssued, pilotIntent, maskDestination);
 		PhaseDefaults.ApplyPhaseDefaults(_context.CurrentPhase, atcContext);
 
 		// If a readback is expected, handle it before other routing.
 			if (_pendingReadback != null)
 			{
-				var eval = ReadbackValidator.Evaluate(pilotTransmission, _pendingReadback.Context, _context, _pendingReadback.Slots, issuedAtcText: _pendingReadback.IssuedAtcText);
+				var eval = ReadbackValidator.Evaluate(normalizedTranscript, _pendingReadback.Context, _context, _pendingReadback.Slots, issuedAtcText: _pendingReadback.IssuedAtcText);
 				LogDebug($"[Readback] Pending slots: {( _pendingReadback.Slots?.Count > 0 ? string.Join(", ", _pendingReadback.Slots) : "all")} ; accepted={eval.Accepted}, missing=[{string.Join(", ", eval.Missing)}], mismatched=[{string.Join(", ", eval.Mismatched)}]");
 				if (eval.Accepted)
 				{
@@ -359,7 +451,7 @@ public class AeroAiLlmSession : IDisposable
 		if (pilotIntent.Type == IntentType.ReadbackClearance
 			&& (_state == AtcState.ClearanceIssued || _ifrClearanceIssued || atcContext.ClearanceDecision.ClearanceType == "IFR_CLEARANCE"))
 		{
-			var eval = ReadbackValidator.Evaluate(pilotTransmission, atcContext, _context, issuedAtcText: _lastAtcResponse);
+			var eval = ReadbackValidator.Evaluate(normalizedTranscript, atcContext, _context, issuedAtcText: _lastAtcResponse);
 			var callsign = !string.IsNullOrWhiteSpace(_context.RadioCallsign)
 				? _context.RadioCallsign
 				: (_context.Callsign ?? "Aircraft");
@@ -384,7 +476,87 @@ public class AeroAiLlmSession : IDisposable
 			}
 		}
 
-		return await RouteToPhaseHandlerAsync(atcContext, pilotTransmission, pilotIntent, cancellationToken);
+		var result = await RouteToPhaseHandlerAsync(atcContext, normalizedTranscript, pilotIntent, cancellationToken, resolvedContext);
+		
+		// If RouteToPhaseHandlerAsync returned null or empty, OR if it returned "say again", check if we should route to LLM
+		var isSayAgain = !string.IsNullOrWhiteSpace(result) && 
+			(result.Contains("say again", StringComparison.OrdinalIgnoreCase) || 
+			 result.Contains("Say again", StringComparison.OrdinalIgnoreCase));
+		
+		if (string.IsNullOrWhiteSpace(result) || isSayAgain)
+		{
+			// Check if transcript is usable - if so, route to LLM as fallback
+			// CRITICAL: This ensures usable transcripts always get a chance with the LLM
+			if (isUsable)
+			{
+				LogDebug($"[Routing] RouteToPhaseHandlerAsync returned {(string.IsNullOrWhiteSpace(result) ? "null/empty" : "'say again'")} for usable transcript - routing to LLM: '{normalizedTranscript}'");
+				_routingMetrics.IncrementLlmCalls();
+				try
+				{
+					var llmResult = await CallLlmAsync(atcContext, normalizedTranscript, cancellationToken, resolvedContext);
+					LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "LLM", 
+						isSayAgain ? "Route returned 'say again' → LLM fallback" : "No match → LLM fallback", 
+						null, isUsable, null, resolvedContext);
+					return llmResult;
+				}
+				catch (Exception ex)
+				{
+					_routingMetrics.IncrementLlmFailures();
+					RoutingDecisionLogger.LogLlmFailure(normalizedTranscript, $"LLM call failed: {ex.Message}", ex, _onDebug);
+					_routingMetrics.IncrementSayAgain();
+					LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SayAgain", 
+						$"LLM failed: {ex.GetType().Name}", null, isUsable, null, resolvedContext);
+					var cs = !string.IsNullOrWhiteSpace(_context.RadioCallsign) ? _context.RadioCallsign : (_context.Callsign ?? "Aircraft");
+					return $"{cs}, say again.";
+				}
+			}
+			else
+			{
+				// Unusable transcript - return say again
+				LogDebug($"[Routing] RouteToPhaseHandlerAsync returned {(string.IsNullOrWhiteSpace(result) ? "null/empty" : "'say again'")} for unusable transcript - returning 'say again': '{normalizedTranscript}', reason: {unusableReason}");
+				_routingMetrics.IncrementUnusableTranscripts();
+				_routingMetrics.IncrementSayAgain();
+				LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "SayAgain", 
+					$"Unusable transcript: {unusableReason}", null, false, unusableReason, resolvedContext);
+				var cs = !string.IsNullOrWhiteSpace(_context.RadioCallsign) ? _context.RadioCallsign : (_context.Callsign ?? "Aircraft");
+				return $"{cs}, say again.";
+			}
+		}
+
+		// Result was generated - log as LLM route (since RouteToPhaseHandlerAsync calls CallLlmAsync internally)
+		// Apply output guardrails to result
+		var scrubbedResult = OutputGuard.ScrubOutput(result, resolvedContext, _onDebug);
+		LogRoutingDecision(rawTranscript, normalizedTranscript, sttConfidence, null, "LLM", 
+			"RouteToPhaseHandlerAsync → LLM", null, isUsable, null, resolvedContext);
+		return scrubbedResult;
+	}
+
+	private void LogRoutingDecision(string rawTranscript, string normalizedTranscript, double? sttConfidence, 
+		ProceduralIntent? matchedIntent, string routeTaken, string reason, string? extractedCallsign, 
+		bool isUsable, string? unusableReason, ResolvedContext? resolvedContext = null)
+	{
+		var decision = new RoutingDecision
+		{
+			RawTranscript = rawTranscript,
+			NormalizedTranscript = normalizedTranscript,
+			SttConfidence = sttConfidence,
+			MatchedIntent = matchedIntent,
+			RouteTaken = routeTaken,
+			Reason = reason,
+			ExtractedCallsign = extractedCallsign,
+			IsUsable = isUsable,
+			UnusableReason = unusableReason,
+			SimbriefCallsign = resolvedContext?.CallsignRaw,
+			SpokenCallsign = resolvedContext?.CallsignSpoken,
+			DepIcao = resolvedContext?.DepartureIcao,
+			ArrIcao = resolvedContext?.ArrivalIcao,
+			DepSpoken = resolvedContext?.DepartureSpoken,
+			ArrSpoken = resolvedContext?.ArrivalSpoken,
+			DepSource = resolvedContext?.DepartureSource,
+			ArrSource = resolvedContext?.ArrivalSource
+		};
+
+		RoutingDecisionLogger.LogDecision(decision, _onDebug, _routingMetrics);
 	}
 
 	/// <summary>
@@ -623,7 +795,7 @@ public class AeroAiLlmSession : IDisposable
 		};
 	}
 
-	private async Task<string?> RouteToPhaseHandlerAsync(AtcContext atcContext, string pilotTransmission, PilotIntent pilotIntent, CancellationToken cancellationToken)
+	private async Task<string?> RouteToPhaseHandlerAsync(AtcContext atcContext, string pilotTransmission, PilotIntent pilotIntent, CancellationToken cancellationToken, ResolvedContext? resolvedContext = null)
 	{
 		switch (_context.CurrentPhase)
 		{
@@ -639,36 +811,51 @@ public class AeroAiLlmSession : IDisposable
 				}
 				if (ClearanceHelpers.ClearanceDataComplete(atcContext))
 				{
-					return await HandleClearanceAsync(atcContext, "Pilot is waiting for IFR clearance.", cancellationToken, pilotIntent: pilotIntent);
+					var result = await HandleClearanceAsync(atcContext, "Pilot is waiting for IFR clearance.", cancellationToken, pilotIntent: pilotIntent, resolvedContext: resolvedContext);
+					if (result != null)
+						return OutputGuard.ScrubOutput(result, resolvedContext, _onDebug);
+					// If HandleClearanceAsync returned null, fall through to LLM
 				}
 			}
-			return await HandleClearanceAsync(atcContext, pilotTransmission, cancellationToken, maskDestination: ShouldMaskDestination(pilotTransmission), pilotIntent: pilotIntent);
+			var clearanceResult = await HandleClearanceAsync(atcContext, pilotTransmission, cancellationToken, maskDestination: ShouldMaskDestination(pilotTransmission), pilotIntent: pilotIntent, resolvedContext: resolvedContext);
+			if (clearanceResult != null)
+				return OutputGuard.ScrubOutput(clearanceResult, resolvedContext, _onDebug);
+			// If HandleClearanceAsync returned null (validation failed, no missing info), return null to trigger LLM fallback
+			return null;
 		case FlightPhase.Taxi_Out:
-                        return await PhaseHandlers.HandleTaxiOutPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var taxiOutResult = await PhaseHandlers.HandleTaxiOutPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(taxiOutResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Lineup_Takeoff:
-                        return await PhaseHandlers.HandleLineupTakeoffPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var lineupResult = await PhaseHandlers.HandleLineupTakeoffPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(lineupResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Climb_Departure:
-                        return await PhaseHandlers.HandleDepartureClimbPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var climbResult = await PhaseHandlers.HandleDepartureClimbPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(climbResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Enroute:
-                        return await PhaseHandlers.HandleEnroutePhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			var enrouteResult = await PhaseHandlers.HandleEnroutePhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(enrouteResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Descent_Arrival:
-                        return await PhaseHandlers.HandleArrivalPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var descentResult = await PhaseHandlers.HandleArrivalPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(descentResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Approach:
-                        return await PhaseHandlers.HandleApproachPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var approachResult = await PhaseHandlers.HandleApproachPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(approachResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Landing:
-                        return await PhaseHandlers.HandleLandingPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var landingResult = await PhaseHandlers.HandleLandingPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(landingResult ?? string.Empty, resolvedContext, _onDebug);
 		case FlightPhase.Taxi_In:
-                        return await PhaseHandlers.HandleTaxiInPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+                        var taxiInResult = await PhaseHandlers.HandleTaxiInPhase(pilotTransmission, atcContext, _context, _responseGenerator, cancellationToken);
+			return OutputGuard.ScrubOutput(taxiInResult ?? string.Empty, resolvedContext, _onDebug);
 		default:
 			if (!HasContextChanged(atcContext))
 			{
 				return _lastAtcResponse;
 			}
-			return await CallLlmAsync(atcContext, pilotTransmission, cancellationToken);
+			return await CallLlmAsync(atcContext, pilotTransmission, cancellationToken, resolvedContext);
 		}
 	}
 
-	public async Task<string?> HandleClearanceAsync(AtcContext context, string pilotTransmission, CancellationToken ct = default(CancellationToken), bool maskDestination = false, PilotIntent? pilotIntent = null)
+	public async Task<string?> HandleClearanceAsync(AtcContext context, string pilotTransmission, CancellationToken ct = default(CancellationToken), bool maskDestination = false, PilotIntent? pilotIntent = null, ResolvedContext? resolvedContext = null)
 	{
 		if (ClearanceHelpers.IsNonOperationalAck(pilotTransmission))
 		{
@@ -683,15 +870,16 @@ public class AeroAiLlmSession : IDisposable
 			if (!isIfrRequest)
 			{
 				string lower = pilotTransmission.ToLowerInvariant();
+				var resolvedCtxIdle = resolvedContext ?? ResolvedContextBuilder.Build(_context);
 				if (lower.Contains("clearance") || lower.Contains("clearence") || lower.Contains("clearan"))
 				{
 					context.Permissions.AllowIfrClearance = false;
 					context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
-					return await CallLlmAsync(context, pilotTransmission, ct);
+					return await CallLlmAsync(context, pilotTransmission, ct, resolvedCtxIdle);
 				}
 				context.Permissions.AllowIfrClearance = false;
 				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
-				return await CallLlmAsync(context, pilotTransmission, ct);
+				return await CallLlmAsync(context, pilotTransmission, ct, resolvedCtxIdle);
 			}
 			_state = AtcState.IfrRequested;
 			
@@ -779,13 +967,32 @@ public class AeroAiLlmSession : IDisposable
 				}
 			}
 
+			// Check if this is a clearance request context (Delivery or Ground during Preflight_Clearance phase)
+			bool isClearanceContext = _context.CurrentPhase == FlightPhase.Preflight_Clearance &&
+				(_context.CurrentAtcUnit == AtcUnit.ClearanceDelivery || _context.CurrentAtcUnit == AtcUnit.Ground);
+
 			// Validate that the request is meaningful (not nonsense).
+			// If validation fails but we're in a clearance context, still check for missing info instead of rejecting
+			// CRITICAL: If validation fails and we can't prompt for missing info, return null to allow LLM fallback
 			if (!IsValidClearanceRequest(pilotTransmission, pilotIntent))
 			{
-				var cs = !string.IsNullOrWhiteSpace(_context.RadioCallsign) ? _context.RadioCallsign : (_context.Callsign ?? "Aircraft");
-				context.Permissions.AllowIfrClearance = false;
-				context.ClearanceDecision.ClearanceType = "INFORMATION_ONLY";
-				return $"{cs}, please state your callsign, request IFR clearance, and destination.";
+				// If we're in clearance context, check for missing info first before rejecting
+				if (isClearanceContext)
+				{
+					EnsureSquawk(context);
+					var missingPrompt = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
+					if (!string.IsNullOrWhiteSpace(missingPrompt))
+					{
+						_state = AtcState.ClearancePendingData;
+						return missingPrompt;
+					}
+				}
+				
+				// Validation failed and no missing info to prompt for
+				// Return null to allow LLM fallback instead of hard-coded "say again"
+				// The LLM can handle misheard or partially understood clearance requests
+				LogDebug($"[Clearance] Validation failed but allowing LLM fallback for: '{pilotTransmission}'");
+				return null; // This will trigger LLM fallback in RouteToPhaseHandlerAsync
 			}
 
 			// STRICT TRAINING MODE: Check if all required training slots are collected
@@ -815,12 +1022,13 @@ public class AeroAiLlmSession : IDisposable
 			}
 
 			// Missing critical IFR fields – prompt for just the missing items.
+			// CRITICAL: Always check for missing info when in clearance context (Delivery/Ground)
 			// Note: destMismatch was already checked above, so this should be false here.
-			var missingPrompt = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
-			if (!string.IsNullOrWhiteSpace(missingPrompt))
+			var missingInfoCheck = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
+			if (!string.IsNullOrWhiteSpace(missingInfoCheck))
 			{
 				_state = AtcState.ClearancePendingData;
-				return missingPrompt;
+				return missingInfoCheck;
 			}
 			
 			// Double-check ATIS even if BuildMissingInfoPrompt returned null (strict training mode).
@@ -858,7 +1066,8 @@ public class AeroAiLlmSession : IDisposable
 			context.Permissions.AllowIfrClearance = true;
 			context.ClearanceDecision.ClearanceType = "IFR_CLEARANCE";
 			EnsureSquawk(context);
-			string atc3 = await CallLlmAsync(context, pilotTransmission, ct);
+			var resolvedCtx = resolvedContext ?? ResolvedContextBuilder.Build(_context);
+			string atc3 = await CallLlmAsync(context, pilotTransmission, ct, resolvedCtx);
 			_state = AtcState.ClearanceIssued;
 			_ifrClearanceIssued = true;
 			context.StateFlags.IfrClearanceIssued = true;
@@ -868,6 +1077,10 @@ public class AeroAiLlmSession : IDisposable
 		case AtcState.ClearancePendingData:
 			pilotIntent = _intentParser.ParseIntent(pilotTransmission, _context);
 			context = FlightContextToAtcContextMapper.Map(pilotIntent: pilotIntent, flightContext: _context, ifrClearanceIssued: _ifrClearanceIssued, hideDestination: maskDestination);
+			
+			// Check if we're in clearance context (Delivery or Ground during Preflight_Clearance)
+			bool isClearanceContextPending = _context.CurrentPhase == FlightPhase.Preflight_Clearance &&
+				(_context.CurrentAtcUnit == AtcUnit.ClearanceDelivery || _context.CurrentAtcUnit == AtcUnit.Ground);
 			
 			// If strict training mode, transition to collecting training data
 			if (TrainingConfig.StrictClearanceData)
@@ -904,6 +1117,10 @@ public class AeroAiLlmSession : IDisposable
 					{
 						_state = AtcState.ClearanceCollectingTrainingData;
 					}
+					else
+					{
+						_state = AtcState.ClearancePendingData;
+					}
 					return $"{cs}, confirm you have the latest information.";
 				}
 				// If ATIS was mentioned, mark as confirmed
@@ -915,7 +1132,20 @@ public class AeroAiLlmSession : IDisposable
 				}
 			}
 
+			// CRITICAL: Always check for missing info when in clearance context
+			// This ensures iterative prompting until all required data is collected
 			EnsureSquawk(context);
+			
+			// Check for missing information first
+			var missingInfoPrompt = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
+			if (!string.IsNullOrWhiteSpace(missingInfoPrompt))
+			{
+				// Stay in ClearancePendingData state to continue collecting
+				_state = AtcState.ClearancePendingData;
+				return missingInfoPrompt;
+			}
+			
+			// Only check if complete if no missing info was found
 			if (ClearanceHelpers.ClearanceDataComplete(context))
 			{
 				// Check strict training mode before transitioning to ready
@@ -931,8 +1161,24 @@ public class AeroAiLlmSession : IDisposable
 				_state = AtcState.ClearanceReady;
 				goto case AtcState.ClearanceReady;
 			}
+			
+			// If data is still incomplete but BuildMissingInfoPrompt returned nothing,
+			// check again more thoroughly (this should rarely happen, but ensures we don't miss anything)
+			if (isClearanceContextPending)
+			{
+				var thoroughCheck = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
+				if (!string.IsNullOrWhiteSpace(thoroughCheck))
+				{
+					_state = AtcState.ClearancePendingData;
+					return thoroughCheck;
+				}
+			}
 			if (isIfrRequest && !ClearanceHelpers.IsNonOperationalAck(pilotTransmission))
 			{
+				// Check if we're in clearance context (Delivery or Ground during Preflight_Clearance)
+				bool isClearanceContext = _context.CurrentPhase == FlightPhase.Preflight_Clearance &&
+					(_context.CurrentAtcUnit == AtcUnit.ClearanceDelivery || _context.CurrentAtcUnit == AtcUnit.Ground);
+
 				// Check destination mismatch first - hard stop, no clearance.
 				var destMismatch = pilotIntent.Parameters.TryGetValue("__dest_mismatch", out var dm) && dm == "true";
 				if (destMismatch)
@@ -945,9 +1191,16 @@ public class AeroAiLlmSession : IDisposable
 					{
 						_state = AtcState.ClearanceCollectingTrainingData;
 					}
+					else
+					{
+						_state = AtcState.ClearancePendingData;
+					}
 					return $"{cs}, flight plan shows destination {plannedName}, confirm destination.";
 				}
 
+				// CRITICAL: Always check for missing info when in clearance context
+				// This ensures ATC iteratively asks for missing information until complete
+				EnsureSquawk(context);
 				var missingPrompt = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
 				if (!string.IsNullOrWhiteSpace(missingPrompt))
 				{
@@ -955,7 +1208,24 @@ public class AeroAiLlmSession : IDisposable
 					{
 						_state = AtcState.ClearanceCollectingTrainingData;
 					}
+					else
+					{
+						_state = AtcState.ClearancePendingData;
+					}
 					return missingPrompt;
+				}
+
+				// If no missing info but we're in clearance context and data is incomplete, 
+				// still check completeness one more time before allowing LLM
+				if (isClearanceContext && !ClearanceHelpers.ClearanceDataComplete(context))
+				{
+					// Re-check with more thorough validation
+					var thoroughMissingPrompt = BuildMissingInfoPrompt(context, pilotTransmission, destinationMismatch: false);
+					if (!string.IsNullOrWhiteSpace(thoroughMissingPrompt))
+					{
+						_state = AtcState.ClearancePendingData;
+						return thoroughMissingPrompt;
+					}
 				}
 
 				// All data present but ATIS not confirmed: still block (strict training mode).
@@ -1072,7 +1342,8 @@ public class AeroAiLlmSession : IDisposable
 			context.ClearanceDecision.ClearanceType = "IFR_CLEARANCE";
 			EnsureSquawk(context);
 			string effectivePilotText = (string.IsNullOrWhiteSpace(pilotTransmission) ? "Pilot is waiting for IFR clearance." : pilotTransmission);
-			string atc = await CallLlmAsync(context, effectivePilotText, ct);
+			var resolvedCtx2 = resolvedContext ?? ResolvedContextBuilder.Build(_context);
+			string atc = await CallLlmAsync(context, effectivePilotText, ct, resolvedCtx2);
 			_state = AtcState.ClearanceIssued;
 			_ifrClearanceIssued = true;
 			context.StateFlags.IfrClearanceIssued = true;
@@ -1084,16 +1355,18 @@ public class AeroAiLlmSession : IDisposable
 		case AtcState.ClearanceIssued:
 			// Previously we swallowed readbacks here, which meant no reply.
 			// Route the readback to the LLM so it can confirm/correct it.
-			return await CallLlmAsync(context, pilotTransmission, ct);
+			var resolvedCtx3 = resolvedContext ?? ResolvedContextBuilder.Build(_context);
+			return await CallLlmAsync(context, pilotTransmission, ct, resolvedCtx3);
 		default:
 			return null;
 		}
 	}
 
-	private async Task<string> CallLlmAsync(AtcContext context, string pilotTransmission, CancellationToken cancellationToken)
+	private async Task<string> CallLlmAsync(AtcContext context, string pilotTransmission, CancellationToken cancellationToken, ResolvedContext? resolvedContext = null)
 	{
 		try
 		{
+			_routingMetrics.IncrementLlmCalls();
                         var request = new AtcRequest
                         {
                                 TranscriptText = pilotTransmission,
@@ -1102,33 +1375,44 @@ public class AeroAiLlmSession : IDisposable
                                 SessionState = _state,
                                 AtcContext = context
                         };
-                        _lastAtcResponse = (await _responseGenerator.GenerateAsync(request, cancellationToken)).SpokenText.Trim();
+                        var rawResponse = (await _responseGenerator.GenerateAsync(request, cancellationToken)).SpokenText.Trim();
+			
+			// Apply output guardrails to scrub ICAO codes and raw callsigns
+			var scrubbedResponse = OutputGuard.ScrubOutput(rawResponse, resolvedContext, _onDebug);
+			
+			_lastAtcResponse = scrubbedResponse;
 			_lastContext = context;
 			if (HasCriticalItems(context))
 			{
 				_pendingReadback = new PendingReadbackRequest(context, null, _lastAtcResponse);
 				LogDebug($"[Readback] Expecting readback for controller_role={context.ControllerRole}, cleared_to={context.ClearanceDecision.ClearedTo}, runway={context.ClearanceDecision.DepRunway}, squawk={context.ClearanceDecision.Squawk}, alt={context.ClearanceDecision.InitialAltitudeFt}, sid={context.ClearanceDecision.Sid}, type={context.ClearanceDecision.ClearanceType}");
 			}
-			return _lastAtcResponse;
+			return scrubbedResponse;
 		}
 		catch (OperationCanceledException)
 		{
+			_routingMetrics.IncrementLlmFailures();
+			RoutingDecisionLogger.LogLlmFailure(pilotTransmission, "LLM timeout/cancelled", null, _onDebug);
 			return "Standby, processing your request.";
 		}
 		catch (InvalidOperationException ex2)
 		{
+			_routingMetrics.IncrementLlmFailures();
 			InvalidOperationException ex3 = ex2;
 			Console.Error.WriteLine("ERROR: " + ex3.Message);
 			if (ex3.InnerException != null)
 			{
 				Console.Error.WriteLine("  Inner: " + ex3.InnerException.Message);
 			}
+			RoutingDecisionLogger.LogLlmFailure(pilotTransmission, $"InvalidOperation: {ex3.Message}", ex3, _onDebug);
 			return "Standby, experiencing technical difficulties. Please check your .env file and API key.";
 		}
 		catch (Exception ex4)
 		{
+			_routingMetrics.IncrementLlmFailures();
 			Exception ex5 = ex4;
 			Console.Error.WriteLine("ERROR: " + ex5.GetType().Name + ": " + ex5.Message);
+			RoutingDecisionLogger.LogLlmFailure(pilotTransmission, $"{ex5.GetType().Name}: {ex5.Message}", ex5, _onDebug);
 			return "Standby, experiencing technical difficulties. (" + ex5.GetType().Name + ")";
 		}
 	}
@@ -1446,6 +1730,10 @@ public class AeroAiLlmSession : IDisposable
 		}
 		if (!ctx.ClearanceDecision.InitialAltitudeFt.HasValue)
 			missing.Add("say initial altitude");
+		
+		// Note: Departure runway is assigned by ATC, not requested from pilot, so we don't check for it here.
+		// ATC will assign the runway when issuing the clearance based on weather/airport conditions.
+		
 		// Validate aircraft type using resolver; if invalid/unknown, prompt for ICAO type.
 		var flightType = _context.Aircraft?.IcaoType;
 		// Try to resolve from the pilot transmission first (captures natural speech/model names).
