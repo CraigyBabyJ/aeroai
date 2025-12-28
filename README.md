@@ -27,7 +27,15 @@ AeroAI is a Windows .NET 8 ATC copilot with a WPF desktop UI, SimBrief ingest, S
 6) Build: `dotnet build AeroAI.sln`.
 
 ## Running
-For a full experience, you should run the three components in separate terminals:
+
+### Quick Start (Recommended)
+Run the all-in-one script from the root directory to launch VoiceLab, Whisper-Fast, and the AeroAI UI:
+```powershell
+./run_all.ps1
+```
+
+### Manual Start
+For more control or debugging, you can run the three components in separate terminals:
 
 1.  **VoiceLab (TTS)**:
     ```powershell
